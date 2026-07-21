@@ -78,14 +78,9 @@ show you how LanceDB fixes this with the Lance format.
 </style>
 
 <!--
-Our task is TextVQA: that is, answer a question about an image where the answer is in text embedded inside the image. What brand is this packet of sugar? The model has to reason over the pixels pf the image and read the text on the packet, to say "Domino".
+Our task is TextVQA: where the model has to answer a question about an image where the answer is in text embedded inside the image. To answer questions about the brand name of the sugar, the model has to reason over the image representation, and answer "Domino".
 
-This is visual question-answering in a nutshell. It has two stages: an image encoder turns the image into embeddings; THEN a language model reads those embeddings
-plus your question and generates the answer.
-
-Even if your base model is capable, it likely misses small domain details, like that tiny
-print on the label. Supervised fine-tuning is the answer: we show the model lots of image,
-question and answer examples until it gets good at our kind of questions.
+We use supervised fine-tuning to improve a Qwen base model: we show the model lots of image, question and answer examples until it gets good at our kind of questions.
 -->
 
 ---
@@ -123,17 +118,9 @@ class: flex flex-col justify-center
 <!--
 There's some wasteful compute hidden in this process.
 During fine-tuning, the image encoder is frozen. The same
-image in, the same embeddings out, every single epoch. Yet, the standard training
-loop re-encodes every image on every pass. That's wasteful.
+image in, the same embeddings out, every single epoch.
 
-The fix is to precompute those embeddings once. But where do you put them?
-Sidecar files may drift from the source data. Adding a column to the Parquet file
-may mean rewriting the whole table.
-
-With Lance, you add them as a column on the same table, and the dataloader
-reads them straight off disk. Each training step then processes about twice the
-throughput, roughly 16 versus 8 samples per second, and it frees over a gigabyte
-of GPU memory.
+To avoid re-encoding an image on every pass, we can precompute the hidden layers and persist them to disk. When you do this with Lance, you can add these expensive-to-compute features to the same table in a zero-copy manner, and you benefit from fast scan and shuffle performance during data loading.
 -->
 
 ---
@@ -253,10 +240,7 @@ With Lance, creating new features is cheap enough that materializing results fro
 </style>
 
 <!--
-Adding columns is cheap because of what we call zero-copy data evolution.
-Lance tables grow in two directions. New
-feature columns are added alongside existing columns, and new observations append
-below existing rows.
+Adding columns in Lance is zero-copy, because a Lance table grows in two directions. New feature columns are added alongside existing columns, and new observations append below existing rows.
 
 Neither touches the existing data files; only the new column's data gets
 written. No table rewrite, no sidecar files.

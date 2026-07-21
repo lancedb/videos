@@ -36,7 +36,7 @@ def _(mo):
     mo.md(r"""
     # Fine-tune a VLM on scene-text Q&A, backed by one Lance table
 
-    [![Open in molab](https://marimo.io/molab-shield.svg)](https://molab.marimo.io/github/lancedb/videos/blob/main/vlm-materialized-features/video-1/01_finetune_vlm_lance.py)
+    [![Open in molab](https://marimo.io/molab-shield.svg)](https://molab.marimo.io/github/lancedb/videos/blob/main/vlm-materialized-features/video-1/01_finetune_vlm_lancedb.py)
 
     This notebook runs the whole vision-language fine-tuning loop end to end, off a
     single Lance table: download, explore, benchmark reads, QLoRA fine-tune, and
@@ -617,7 +617,7 @@ def _(mo):
     3. trained a vision-tower-free, 4-bit LoRA loop reading that column off disk,
     4. compared base vs tuned on held-out images.
 
-    The same code runs the full 34,602-row corpus on an H100. On this curated slice
+    The same code can run the full 34,602-row corpus on a more powerful GPU. On this curated slice
     the lift was **0.799 → 0.820** (+2.1 pp).
     """)
     return
