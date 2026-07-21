@@ -398,11 +398,13 @@ def _(pa, torch, udf):
                 out = self._model(inputs["pixel_values"].to(self._dtype), grid_thw=inputs["image_grid_thw"])
             return out.pooler_output.to(torch.float16).flatten().cpu().numpy().tolist()
 
-    # Wrap the class as a UDF with a fixed-size-list output type.
+    # Wrap the class as a UDF with a fixed-size-list output type. num_gpus=1
+    # tells the compute context to schedule this UDF's worker on a GPU.
     vision_tower_hiddens = udf(
         data_type=pa.list_(pa.float16(), LLM_TOKENS_PER_IMAGE * VISION_HIDDEN),
         input_columns=["image"],
-    )(VisionTowerEmbedder())
+        num_gpus=1,
+    )(VisionTowerEmbedder)()  # final () creates the Geneva UDF
     return (vision_tower_hiddens,)
 
 
@@ -422,7 +424,7 @@ def _(HAS_GPU, TABLE_NAME, gdb, mo, t3_button, vision_tower_hiddens):
         with gdb.local_ray_context():
             _table.backfill(
                 "vision_tower_hiddens", udf=vision_tower_hiddens,
-                concurrency=2, task_size=128, checkpoint_size=64,
+                concurrency=1, task_size=128, checkpoint_size=64,  # one worker per GPU
             )
         _msg = f"Backfilled `vision_tower_hiddens` in {time.time() - _t0:.0f}s."
     tier3_done = "vision_tower_hiddens"
