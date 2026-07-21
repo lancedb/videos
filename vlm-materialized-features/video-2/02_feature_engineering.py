@@ -99,8 +99,11 @@ def _(mo):
     mo.md(r"""
     ## 1 · The table
 
-    Download the public subset and open it. Everything below adds columns to *this*
-    table; the raw image, question, and answer never move.
+    Download the public subset, then project out just the **raw** columns (`id`,
+    `image`, `question`, `answer`) into a fresh local table. The download ships with
+    precomputed feature columns (that is video 1's point), so starting from a
+    raw-only copy means every column this notebook adds is genuinely new. The raw
+    image, question, and answer never move again.
     """)
     return
 
@@ -114,21 +117,29 @@ def _(geneva, lance):
         repo_type="dataset",
         local_dir="data/colab",
     )
-    TABLE_NAME = "textvqa_colab_train"
-    TRAIN_PATH = f"{LOCAL}/{TABLE_NAME}.lance"
 
-    # geneva handle for feature engineering (backfills); a plain Lance handle for reads.
-    gdb = geneva.connect(LOCAL)
+    # Project just the raw columns into a fresh table: every feature column the
+    # notebook adds from here on is genuinely new. (The download also ships the
+    # precomputed features; we deliberately leave those behind.)
+    RAW_COLS = ["id", "image", "question", "answer"]
+    raw = lance.dataset(f"{LOCAL}/textvqa_colab_train.lance").to_table(columns=RAW_COLS)
+
+    DEMO_DIR = "data/demo"
+    TABLE_NAME = "textvqa_raw"
+    DEMO_PATH = f"{DEMO_DIR}/{TABLE_NAME}.lance"
+    lance.write_dataset(raw, DEMO_PATH, mode="overwrite")
+
+    # geneva handle for feature engineering (backfills); plain Lance handles for reads.
+    gdb = geneva.connect(DEMO_DIR)
 
     def read_columns(cols, limit=None):
-        ds = lance.dataset(TRAIN_PATH)  # reopened each call to pick up new columns
+        ds = lance.dataset(DEMO_PATH)  # reopened each call to pick up new columns
         n = ds.count_rows() if limit is None else min(limit, ds.count_rows())
         return ds.to_table(columns=cols, limit=n).to_pandas()
 
-    _ds = lance.dataset(TRAIN_PATH)
-    print("rows   :", _ds.count_rows())
-    print("columns:", _ds.schema.names)
-    return TABLE_NAME, TRAIN_PATH, gdb, read_columns
+    print("rows   :", raw.num_rows)
+    print("columns:", raw.schema.names)
+    return DEMO_PATH, TABLE_NAME, gdb, read_columns
 
 
 @app.cell(hide_code=True)
@@ -258,9 +269,10 @@ def _(mo):
     lazy-loads the model in the worker so the driver never touches the GPU. The
     abstraction is the same; only the cost is different.
 
-    This is gated behind a button because it needs a GPU. On this shipped subset the
-    column already exists (it was produced by exactly this call), so the cell reports
-    that instead of recomputing.
+    This is gated behind a button because it needs a GPU (and the first run also
+    downloads the ~7 GB model). On molab, toggle the GPU on and click the button:
+    the backfill runs for real over all 600 images, with the knobs that matter at
+    scale (`concurrency`, `task_size`, `checkpoint_size`).
     """)
     return
 
@@ -330,26 +342,20 @@ def _(HAS_GPU, TABLE_NAME, gdb, mo, t3_button, vision_tower_hiddens):
     mo.stop(not HAS_GPU, mo.md("> ⚠️ **GPU required.** Enable a GPU in the notebook specs, then re-run."))
     mo.stop(not t3_button.value, mo.md("> ▶ Click **Run Tier 3 backfill** above."))
 
+    import time
+
     _table = gdb.open_table(TABLE_NAME)
     if "vision_tower_hiddens" in {f.name for f in _table.schema}:
-        _msg = (
-            "`vision_tower_hiddens` is already on this table. It was produced by the "
-            "exact call below, with the knobs that matter at scale:\n\n"
-            "```python\n"
-            "table.add_columns({'vision_tower_hiddens': vision_tower_hiddens})\n"
-            "with db.local_ray_context():\n"
-            "    table.backfill('vision_tower_hiddens', udf=vision_tower_hiddens,\n"
-            "                   concurrency=2, task_size=128, checkpoint_size=64)\n"
-            "```"
-        )
+        _msg = "`vision_tower_hiddens` is already on the table (backfilled earlier in this session)."
     else:
+        _t0 = time.time()
         _table.add_columns({"vision_tower_hiddens": vision_tower_hiddens})
         with gdb.local_ray_context():
             _table.backfill(
                 "vision_tower_hiddens", udf=vision_tower_hiddens,
                 concurrency=2, task_size=128, checkpoint_size=64,
             )
-        _msg = "Backfilled `vision_tower_hiddens`."
+        _msg = f"Backfilled `vision_tower_hiddens` in {time.time() - _t0:.0f}s."
     tier3_done = "vision_tower_hiddens"
     mo.md(_msg)
     return
@@ -407,9 +413,9 @@ def _(mo):
 
 
 @app.cell
-def _(TRAIN_PATH, lance, mo, tier1_done, tier2_done):
+def _(DEMO_PATH, lance, mo, tier1_done, tier2_done):
     _ = (tier1_done, tier2_done)  # depend on the backfills so this runs after them
-    _names = lance.dataset(TRAIN_PATH).schema.names
+    _names = lance.dataset(DEMO_PATH).schema.names
     _added = [n for n in ("question_type", "dhash", "vision_tower_hiddens") if n in _names]
     mo.md(
         f"**Final schema:** {len(_names)} columns.  \n"
