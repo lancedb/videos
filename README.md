@@ -3,6 +3,11 @@
 Code behind LanceDB demo videos. Each video project is a self-contained directory
 with its runnable materials (marimo notebooks, helper code, and slides).
 
+The notebooks are [marimo](https://marimo.io) notebooks: Jupyter-style, but stored
+as plain Python files. Each project's "Open in molab" badge runs its notebook on
+[molab](https://molab.marimo.io), marimo's hosted notebook service, similar to
+Google Colab.
+
 See [AGENTS.md](AGENTS.md) for how the repo is organized and how to work in it.
 
 ## Projects
@@ -20,7 +25,4 @@ into short, educational videos.
   fine-tuning pipelines. A marimo notebook that builds three tiers of feature
   columns on one Lance table with UDF backfills, plus its slide deck.
 
-The notebooks are [marimo](https://marimo.io) notebooks (Jupyter-style, stored as
-plain Python files). Each project README has the run steps: run the notebook
-locally with marimo, or click its "Open in molab" badge to run it on
-[molab](https://molab.marimo.io), marimo's hosted notebook service.
+Each project README has the run steps, both local and on molab.

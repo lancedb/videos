@@ -12,6 +12,11 @@ on every training read. Compute those features once, store them as a column in a
 Lance table (a cheap, zero-copy append), and the training loop reads them straight
 off disk. The result is roughly 2x faster steps and about 1.3 GB less GPU memory.
 
+The demo is a [marimo](https://marimo.io) notebook: it works like a Jupyter
+notebook, but is stored as a plain Python file. The "Open in molab" badge above
+runs it on [molab](https://molab.marimo.io), marimo's hosted notebook service,
+similar to Google Colab, with no local setup.
+
 ## What's here
 
 ```
@@ -45,11 +50,6 @@ notebook carries its own environment. The two GPU-heavy sections (fine-tune and
 eval) sit behind run buttons, so opening the notebook never starts a training run.
 
 ## How to run
-
-This is a [marimo](https://marimo.io) notebook: it works like a Jupyter notebook,
-but is stored as a plain Python file. [molab](https://molab.marimo.io) is marimo's
-hosted notebook service, similar to Google Colab, and runs the notebook in your
-browser with no local setup.
 
 ### Locally (no GPU needed): the data-layer sections
 

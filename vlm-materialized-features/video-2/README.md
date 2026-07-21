@@ -13,6 +13,11 @@ materializes it as a new column on the table that already holds your raw data. I
 handles batching, checkpointing, and distributing the compute, so the same function
 runs on a laptop or a cluster.
 
+The demo is a [marimo](https://marimo.io) notebook: it works like a Jupyter
+notebook, but is stored as a plain Python file. The "Open in molab" badge above
+runs it on [molab](https://molab.marimo.io), marimo's hosted notebook service,
+similar to Google Colab, with no local setup.
+
 ## What's here
 
 ```
@@ -50,11 +55,6 @@ Dependencies are declared inline in a PEP 723 header, so the notebook carries it
 environment.
 
 ## How to run
-
-This is a [marimo](https://marimo.io) notebook: it works like a Jupyter notebook,
-but is stored as a plain Python file. [molab](https://molab.marimo.io) is marimo's
-hosted notebook service, similar to Google Colab, and runs the notebook in your
-browser with no local setup.
 
 ### Locally (no GPU needed): Tiers 1 and 2
 
