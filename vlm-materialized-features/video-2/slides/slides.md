@@ -47,9 +47,9 @@ about making that part cheap.
 
 ---
 
-# Add features by <span class="gradient-text">adding columns</span>
+# Zero-copy data evolution
 
-<p class="lede">Every feature you derive lands as a new column on the table that already holds your raw data.</p>
+<p class="lede">Backfill a new column, without rewriting the table.</p>
 
 <div class="zc-wrap">
 
@@ -80,14 +80,14 @@ about making that part cheap.
 <div>
 
 <ul class="bullet-list" style="margin-top: 8px;">
-  <li><strong>Only the new bytes get written</strong>, so adding a feature never rewrites the table</li>
-  <li>The feature lives <strong>next to the rows it came from</strong>, so there are no sidecar files to keep in sync</li>
-  <li>Read raw inputs and derived features back <strong>together</strong>, straight off the same table</li>
+  <li><strong>Only the new bytes get written</strong>, so adding a column never rewrites the table</li>
+  <li>Parquet-based table formats rewrite files to change a schema (row groups). Lance just <strong>adds the new column to a new data file</strong></li>
+  <li>Features live <strong>next to the existing data</strong>, so there are no sidecar files to keep in sync</li>
 </ul>
 
 <div class="callout" style="margin-top: 28px; font-size: 15px;">
-Because adding a column is nearly free, the natural home for a feature is the
-<strong>source table itself</strong>, not a separate store.
+With Lance, creating new features is cheap enough that materializing results from an expensive computation becomes
+<strong>second nature</strong>.
 </div>
 
 </div>
