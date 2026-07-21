@@ -27,7 +27,7 @@ layout: cover
 
 <p class="subtitle">
 Turn raw data into training-ready feature columns, directly on your LanceDB
-table, without paying an infrastructure tax to compute them at scale.
+table, without worrying about infrastructure to compute them at scale.
 </p>
 
 ::hero::
@@ -35,13 +35,9 @@ table, without paying an infrastructure tax to compute them at scale.
 ![Vector computer illustration](./assets/hero.png)
 
 <!--
-0:00–0:15 · ~15s · SAY:
+When you're fine-tuning models, you're not just dealing with raw images and text. You typically have much richer representations: embeddings, token arrays and derived features.
 
-Fine-tuning doesn't run on raw images and text. It runs on derived data:
-embeddings, tokens, quality signals. Computing that at scale is where research
-time goes. Let's make it cheap.
-
-[advance]
+Computing that at scale is where a lot of research time goes. Let's look at how LanceDB makes that convenient and cheap.
 -->
 
 ---
@@ -160,23 +156,19 @@ With Lance, creating new features is cheap enough that materializing results fro
 </style>
 
 <!--
-0:15–0:55 · ~40s · SAY:
-
-So why is adding that column cheap? Lance tables grow in two directions. New
-feature columns attach alongside the existing data, and new rows append below.
-Neither touches the bytes you already wrote; only the new column's data gets
+Adding a new column in LanceDB and backfilling it is a zero-copy operation.
+New or derived feature columns are added alongside the existing data, and new rows append below.
+Neither touches existing data; only the new column's data gets
 written. No table rewrite, no sidecar files.
 
-That's what makes materializing an expensive computation second nature.
-
-[advance]
+When you use LanceDB, materializing an expensive computation becomes second nature. This makes feature engineering a breeze.
 -->
 
 ---
 class: flex flex-col justify-center
 ---
 
-# Three tiers of features, <span class="gradient-text">one abstraction</span>
+# Three tiers of features, <span class="gradient-text">one UDF abstraction</span>
 
 <p class="lede">The features a fine-tuning pipeline needs span a wide cost range. The way you define them shouldn't.</p>
 
@@ -205,6 +197,10 @@ class: flex flex-col justify-center
     <div class="ft-abs-k">You write</div>
     <div class="ft-abs-v">a plain Python function that turns one row into a feature (a <strong>UDF</strong>)</div>
   </div>
+<pre class="ft-code">@udf(data_type=str)
+def question_type(question):
+    ...                 # your logic
+    return label</pre>
   <div class="ft-abs-row">
     <div class="ft-abs-k">It handles</div>
     <div class="ft-abs-v">batching, checkpointing, resuming after a failure, and spreading the work across your compute</div>
@@ -254,21 +250,24 @@ class: flex flex-col justify-center
 .ft-abs-v { font-size: 15px; color: var(--fg); line-height: 1.5; }
 .ft-abs-v strong { color: var(--accent-soft); }
 .ft-note { font-size: 13px; color: var(--fg-muted); border-top: 1px solid var(--border); padding-top: 12px; }
+.ft-code {
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 12.5px; line-height: 1.55;
+  background: var(--bg-deep); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px; margin: 0;
+  color: var(--accent-soft); white-space: pre; overflow-x: auto;
+}
 </style>
 
 <!--
-0:55–1:35 · ~40s · SAY:
+During training or fine-tuning, there are many kinds of features you may want to compute. Simple text features generated via regular expressions or classifiers run on pure CPU, in seconds.
 
-The features you need cover a huge cost range. Text signals like question type,
-pure CPU, seconds. Image features like a perceptual hash for near-duplicates. And
-model features: a frozen vision model run over every image.
+In the next tier, you have image features like computing a perceptual hash for image deduplication. 
+At the third, most expensive tier, you need model features that require a GPU. For fine-tuning VLMs, this means extracting the frozen hidden layers and token embeddings and precomputing them for each image.
 
-Three very different costs, but the way you define each one is the same: a plain
-Python function that turns a row into a feature. A UDF. LanceDB's feature
-engineering batches it, checkpoints so a crash resumes, and spreads the compute
-out. Same function, laptop or cluster.
+The three tiers involve very different costs, but the way you define each one is the same: a plain
+Python function that turns a row into a feature. A UDF. LanceDB provides the feature
+engineering capabilities to create batches, checkpoints in case of failures, and distributing the compute. Run your code the same way, on laptop or cluster.
 
-Let's build all three, on a real table.
-
-[cut to the notebook]
+Let's understand how this works by looking at a real example.
 -->
