@@ -51,6 +51,11 @@ environment.
 
 ## How to run
 
+This is a [marimo](https://marimo.io) notebook: it works like a Jupyter notebook,
+but is stored as a plain Python file. [molab](https://molab.marimo.io) is marimo's
+hosted notebook service, similar to Google Colab, and runs the notebook in your
+browser with no local setup.
+
 ### Locally (no GPU needed): Tiers 1 and 2
 
 You need [uv](https://docs.astral.sh/uv/) installed (`uvx` ships with it). Clone

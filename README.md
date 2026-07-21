@@ -20,5 +20,7 @@ into short, educational videos.
   fine-tuning pipelines. A marimo notebook that builds three tiers of feature
   columns on one Lance table with UDF backfills, plus its slide deck.
 
-Each project README has the run steps: run the notebook locally with marimo, or
-click its "Open in molab" badge to run it on the molab server.
+The notebooks are [marimo](https://marimo.io) notebooks (Jupyter-style, stored as
+plain Python files). Each project README has the run steps: run the notebook
+locally with marimo, or click its "Open in molab" badge to run it on
+[molab](https://molab.marimo.io), marimo's hosted notebook service.
