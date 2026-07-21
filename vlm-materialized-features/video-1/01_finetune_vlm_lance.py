@@ -627,18 +627,19 @@ def _(mo):
     mo.md(r"""
     ## Appendix — helper code
 
-    The three hidden cells below hold the data and model plumbing, frozen from
-    [lancedb/tmls-2026-demo](https://github.com/lancedb/tmls-2026-demo): the official
-    TextVQA scorer plus model loading/generation, the LanceDB Permutation-API
-    dataloader, and the QLoRA training helpers. They live inside the notebook so it
-    is fully self-contained — "Open in molab" needs only this one file. Click a cell
-    to expand its code.
+    The notebook is fully self-contained: instead of importing from a package, the
+    data and model plumbing lives in the three hidden cells below, frozen from
+    [lancedb/tmls-2026-demo](https://github.com/lancedb/tmls-2026-demo). That is why
+    "Open in molab" needs only this one file.
+
+    The code is hidden, not gone — each cell shows a one-line summary of what it
+    defines. To read one, select the cell and choose **Show code** from its menu.
     """)
     return
 
 
 @app.cell(hide_code=True)
-def _(Image, io, re, torch):
+def _(Image, io, mo, re, torch):
     # ── Eval helpers (from vlm/eval.py) ─────────────────────────────────────
     import base64
 
@@ -716,11 +717,19 @@ def _(Image, io, re, torch):
         gen = out[0][inputs["input_ids"].shape[1]:]
         return processor.tokenizer.decode(gen, skip_special_tokens=True).strip()
 
+    mo.md(
+        "**Hidden cell · eval helpers** (from `vlm/eval.py`): "
+        "`score_one` — official TextVQA accuracy · "
+        "`load_model` — full Qwen2.5-VL, optionally with the LoRA adapter · "
+        "`generate` — greedy short-answer generation · "
+        "`b64_thumb` — JPEG thumbnails for the galleries. "
+        "*To read the code, choose “Show code” in this cell's menu.*"
+    )
     return QWEN_MODEL_ID, b64_thumb, generate, load_model, score_one
 
 
 @app.cell(hide_code=True)
-def _(lancedb, np, torch):
+def _(lancedb, mo, np, torch):
     # ── LanceDB dataloader (from vlm/dataloader.py + vlm/schema.py) ─────────
     from dataclasses import dataclass
     from pathlib import Path
@@ -848,11 +857,18 @@ def _(lancedb, np, torch):
             multiprocessing_context="spawn" if num_workers > 0 else None,
         )
 
+    mo.md(
+        "**Hidden cell · LanceDB dataloader** (from `vlm/dataloader.py` + "
+        "`vlm/schema.py`): `make_cached_loader` — a torch `DataLoader` that reads "
+        "the cached `vision_tower_hiddens` + token columns straight off the Lance "
+        "table via the Permutation API. "
+        "*To read the code, choose “Show code” in this cell's menu.*"
+    )
     return (make_cached_loader,)
 
 
 @app.cell(hide_code=True)
-def _(QWEN_MODEL_ID, torch):
+def _(QWEN_MODEL_ID, mo, torch):
     # ── Training helpers (from vlm/train_qwen25vl_lora.py) ──────────────────
     IMAGE_PAD_TOKEN = "<|image_pad|>"
 
@@ -934,6 +950,13 @@ def _(QWEN_MODEL_ID, torch):
         )
         return out.loss
 
+    mo.md(
+        "**Hidden cell · training helpers** (from `vlm/train_qwen25vl_lora.py`): "
+        "`build_model` — 4-bit Qwen2.5-VL with the vision tower deleted, wrapped in "
+        "LoRA · `forward_cached` — injects the cached vision hiddens at the "
+        "`<|image_pad|>` positions and returns the loss. "
+        "*To read the code, choose “Show code” in this cell's menu.*"
+    )
     return IMAGE_PAD_TOKEN, build_model, forward_cached
 
 
