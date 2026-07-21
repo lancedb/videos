@@ -83,6 +83,7 @@ def _():
     import os
     import sys
     import time
+    import warnings
     from pathlib import Path
 
     import lancedb
@@ -92,6 +93,10 @@ def _():
 
     # Make the vendored `vlm/` package (next to this notebook) importable.
     sys.path.insert(0, str(Path.cwd()))
+
+    # bitsandbytes emits a noisy _check_is_size FutureWarning on every 4-bit
+    # weight load; silence just that one so the eval/train output stays readable.
+    warnings.filterwarnings("ignore", message=r"_check_is_size.*", category=FutureWarning)
 
     HAS_GPU = torch.cuda.is_available()
     return HAS_GPU, Image, gc, io, json, lancedb, np, os, time, torch
@@ -539,18 +544,43 @@ def _(EVAL_N, GRID_K, b64_thumb, base_ans, mo, rows, score_one, tuned_ans):
     base_score = sum(score_one(b, r["answers"]) for b, r in zip(base_ans, rows)) / len(rows)
     tuned_score = sum(score_one(t, r["answers"]) for t, r in zip(tuned_ans, rows)) / len(rows)
 
-    head = "<tr><th>Image</th><th>Question</th><th>Base</th><th>Tuned</th><th>Ground truth</th></tr>"
-    trs = []
-    for r, b, t in list(zip(rows, base_ans, tuned_ans))[:GRID_K]:
-        gts = r["answers"][:5]
+    # One dict per example; a native marimo table renders it (no raw HTML).
+    win_idx = set()
+    table_rows = []
+    for i, (r, b, t) in enumerate(list(zip(rows, base_ans, tuned_ans))[:GRID_K]):
         bs, ts = score_one(b, r["answers"]), score_one(t, r["answers"])
-        win = 'style="background:#e6ffe6"' if ts > bs else ""
-        thumb = b64_thumb(r["image"])
-        trs.append(
-            f'<tr {win}><td><img src="data:image/jpeg;base64,{thumb}" width=160/></td>'
-            f'<td>{r["question"]}</td><td>{b}</td><td><b>{t}</b></td>'
-            f'<td>{", ".join(gts)}</td></tr>'
+        if ts > bs:
+            win_idx.add(i)
+        table_rows.append(
+            {
+                "Image": f"data:image/jpeg;base64,{b64_thumb(r['image'])}",
+                "Question": r["question"],
+                "Base": b,
+                "Tuned": t,
+                "Ground truth": ", ".join(r["answers"][:5]),
+                "Tuned wins": "✅" if ts > bs else "",
+            }
         )
+
+    def _style(row_id, _column, _value):
+        # Highlight rows where the tuned model beat the base model.
+        try:
+            return {"backgroundColor": "#e6ffe6"} if int(row_id) in win_idx else {}
+        except (TypeError, ValueError):
+            return {}
+
+    results_table = mo.ui.table(
+        table_rows,
+        selection=None,
+        pagination=False,
+        show_column_summaries=False,
+        show_data_types=False,
+        format_mapping={"Image": lambda uri: mo.image(uri, width=150)},
+        wrapped_columns=["Question", "Base", "Tuned", "Ground truth"],
+        text_justify_columns={"Tuned wins": "center"},
+        style_cell=_style,
+    )
+
     mo.vstack(
         [
             mo.md(
@@ -558,7 +588,7 @@ def _(EVAL_N, GRID_K, b64_thumb, base_ans, mo, rows, score_one, tuned_ans):
                 f"base: `{base_score:.3f}`  ·  tuned: `{tuned_score:.3f}` "
                 f"({(tuned_score - base_score) * 100:+.1f} pp)  ·  green rows = tuned beat base"
             ),
-            mo.Html(f"<table>{head}{''.join(trs)}</table>"),
+            results_table,
         ]
     )
     return
