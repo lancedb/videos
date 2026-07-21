@@ -1,4 +1,4 @@
-# Video 1 — Compute it once, store it as a column
+# Video 1: Compute it once, store it as a column
 
 [![Open in molab](https://marimo.io/molab-shield.svg)](https://molab.marimo.io/github/lancedb/videos/blob/main/vlm-materialized-features/video-1/01_finetune_vlm_lancedb.py)
 
@@ -74,7 +74,7 @@ The fine-tune and eval sections need a CUDA GPU (about 5 GB VRAM is plenty). mol
 provides one:
 
 1. Click the **Open in molab** badge at the top of this README (the notebook's
-   title cell carries the same badge). It opens this notebook on the molab server
+   title cell has the same badge). It opens this notebook on the molab server
    with no local setup. Direct link:
    `https://molab.marimo.io/github/lancedb/videos/blob/main/vlm-materialized-features/video-1/01_finetune_vlm_lancedb.py`
 2. Toggle the GPU on via the notebook specs button in the app header.

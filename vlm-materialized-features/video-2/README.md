@@ -1,4 +1,4 @@
-# Video 2 — Feature engineering for fine-tuning pipelines
+# Video 2: Feature engineering for fine-tuning pipelines
 
 [![Open in molab](https://marimo.io/molab-shield.svg)](https://molab.marimo.io/github/lancedb/videos/blob/main/vlm-materialized-features/video-2/02_feature_engineering.py)
 
@@ -32,14 +32,14 @@ everything along.
 `02_feature_engineering.py` builds three tiers of features on one TextVQA Lance
 table, cheapest to most expensive, using one abstraction:
 
-1. **Tier 1, `question_type`** — a plain `@udf` function over the question text.
+1. **Tier 1, `question_type`**: a plain `@udf` function over the question text.
    Backfilled live on CPU; the result's distribution is charted.
-2. **Tier 2, `dhash`** — a 64-bit perceptual hash for near-duplicate images. Same
+2. **Tier 2, `dhash`**: a 64-bit perceptual hash for near-duplicate images. Same
    decorator, same backfill call, only the body changed. Live on CPU.
-3. **Tier 3, `vision_tower_hiddens`** — a stateful class UDF that lazy-loads a frozen
-   vision model and emits a fixed-size vector per image. Gated behind a run button
-   (needs a GPU): clicking it runs the model over all 600 images and writes the
-   column, with the knobs that matter at scale (`concurrency`, `task_size`,
+3. **Tier 3, `vision_tower_hiddens`**: a stateful class UDF that lazy-loads a frozen
+   vision model and emits a fixed-size vector per image. It sits behind a run button
+   because it needs a GPU; clicking it runs the model over all 600 images and writes
+   the column, with the knobs that matter at scale (`concurrency`, `task_size`,
    `checkpoint_size`).
 
 A hidden appendix cell shows the same Tier-3 work written by hand (a single-process
@@ -71,7 +71,7 @@ and takes a few minutes, cached after that.
 The Tier 3 backfill needs a CUDA GPU (about 5 GB VRAM). molab provides one:
 
 1. Click the **Open in molab** badge at the top of this README (the notebook's
-   title cell carries the same badge). It opens this notebook on the molab server
+   title cell has the same badge). It opens this notebook on the molab server
    with no local setup. Direct link:
    `https://molab.marimo.io/github/lancedb/videos/blob/main/vlm-materialized-features/video-2/02_feature_engineering.py`
 2. Toggle the GPU on via the notebook specs button in the app header.

@@ -480,8 +480,8 @@ def _(mo):
     Start with image, question, answer; end with three tiers of features attached,
     each a zero-copy column add. The expensive computations are now materialized on
     the same table that holds the raw data, ready for a training loop to read them
-    straight off disk. Here is the final schema, with the columns this notebook
-    added marked in the **New** column:
+    straight off disk. The final schema is below; the **New** column marks what
+    this notebook added:
     """)
     return
 
