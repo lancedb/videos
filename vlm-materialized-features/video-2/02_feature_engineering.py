@@ -2,8 +2,8 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "marimo",
-#     "lancedb>=0.30.2",
-#     "pylance>=3.0.0",
+#     "lancedb==0.33.0",
+#     "pylance==3.0.0",
 #     "geneva==0.12.0",
 #     "pyarrow",
 #     "numpy",
