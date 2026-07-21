@@ -81,25 +81,21 @@ def _():
     import io
     import json
     import os
-    import sys
+    import re
     import time
     import warnings
-    from pathlib import Path
 
     import lancedb
     import numpy as np
     import torch
     from PIL import Image
 
-    # Make the vendored `vlm/` package (next to this notebook) importable.
-    sys.path.insert(0, str(Path.cwd()))
-
     # bitsandbytes emits a noisy _check_is_size FutureWarning on every 4-bit
     # weight load; silence just that one so the eval/train output stays readable.
     warnings.filterwarnings("ignore", message=r"_check_is_size.*", category=FutureWarning)
 
     HAS_GPU = torch.cuda.is_available()
-    return HAS_GPU, Image, gc, io, json, lancedb, np, os, time, torch
+    return HAS_GPU, Image, gc, io, json, lancedb, np, os, re, time, torch
 
 
 @app.cell(hide_code=True)
@@ -174,8 +170,7 @@ def _(mo):
 
 
 @app.cell
-def _(train_tbl):
-    import re
+def _(re, train_tbl):
     from collections import Counter
 
     import matplotlib.pyplot as plt
@@ -248,9 +243,7 @@ def _(mo):
 
 
 @app.cell
-def _(mo, np, train_tbl):
-    from vlm.eval import _b64_thumb as b64_thumb
-
+def _(b64_thumb, mo, np, train_tbl):
     # Pick a query row, use its question_emb as the query vector against image_emb.
     q = train_tbl.search().select(["question", "question_emb"]).limit(40).to_arrow().to_pylist()[11]
     qvec = np.asarray(q["question_emb"], dtype=np.float32)
@@ -278,7 +271,7 @@ def _(mo, np, train_tbl):
             mo.hstack(hit_cards, justify="start", wrap=True, gap=1),
         ]
     )
-    return (b64_thumb,)
+    return
 
 
 @app.cell(hide_code=True)
@@ -384,10 +377,11 @@ def _(mo):
     mo.md(r"""
     ## 4 · QLoRA fine-tune, from the cached columns
 
-    We reuse the repo's own building blocks (`_build_model`, `_forward_cached`,
-    `make_cached_loader`) so this is the real code path, driven inline.
+    We use the notebook's own helpers (`build_model`, `forward_cached`,
+    `make_cached_loader` — hidden cells in the appendix at the bottom) so this is
+    the real code path, driven inline.
 
-    `_build_model(..., load_4bit=True)` loads the LLM in 4-bit NF4 (~2 GB instead of
+    `build_model(..., load_4bit=True)` loads the LLM in 4-bit NF4 (~2 GB instead of
     ~7.5 GB), **deletes the vision tower** (we have its output cached), and wraps the
     LLM's q/k/v/o with a LoRA adapter. The loop pulls `vision_tower_hiddens` +
     `input_ids` + `labels` from Lance and injects the cached hiddens at the
@@ -405,7 +399,15 @@ def _(mo):
 
 
 @app.cell
-def _(HAS_GPU, mo, torch, train_button):
+def _(
+    HAS_GPU,
+    IMAGE_PAD_TOKEN,
+    QWEN_MODEL_ID,
+    build_model,
+    mo,
+    torch,
+    train_button,
+):
     mo.stop(
         not HAS_GPU,
         mo.md("> ⚠️ **GPU required.** Enable a GPU in the notebook specs, then re-run."),
@@ -414,32 +416,16 @@ def _(HAS_GPU, mo, torch, train_button):
 
     from transformers import AutoTokenizer
 
-    from vlm.dataloader import make_cached_loader
-    from vlm.train_qwen25vl_lora import (
-        _build_model,
-        _forward_cached as forward_cached,
-        _IMAGE_PAD_TOKEN,
-        _QWEN_MODEL_ID,
-    )
+    tok = AutoTokenizer.from_pretrained(QWEN_MODEL_ID)
+    image_pad_id = tok.convert_tokens_to_ids(IMAGE_PAD_TOKEN)
 
-    tok = AutoTokenizer.from_pretrained(_QWEN_MODEL_ID)
-    image_pad_id = tok.convert_tokens_to_ids(_IMAGE_PAD_TOKEN)
-
-    model = _build_model(use_lora=True, lora_r=16, load_4bit=True)
+    model = build_model(use_lora=True, lora_r=16, load_4bit=True)
     model.train()
 
     trainable = [p for p in model.parameters() if p.requires_grad]
     optim = torch.optim.AdamW(trainable, lr=3e-5, betas=(0.9, 0.95))
     device = torch.device("cuda:0")
-    return (
-        device,
-        forward_cached,
-        image_pad_id,
-        make_cached_loader,
-        model,
-        optim,
-        trainable,
-    )
+    return device, image_pad_id, model, optim, trainable
 
 
 @app.cell
@@ -520,10 +506,19 @@ def _(mo):
 
 
 @app.cell
-def _(ADAPTER_DIR, Image, eval_button, gc, io, mo, torch, val_tbl):
+def _(
+    ADAPTER_DIR,
+    Image,
+    eval_button,
+    gc,
+    generate,
+    io,
+    load_model,
+    mo,
+    torch,
+    val_tbl,
+):
     mo.stop(not eval_button.value, mo.md("> ▶ Click **Run before/after eval** above (run the fine-tune first)."))
-
-    from vlm.eval import _generate as generate, _load_model as load_model, _score_one as score_one
 
     EVAL_N = min(val_tbl.count_rows(), 256)  # held-out curated val rows to score
     GRID_K = 6  # how many to show side by side
@@ -549,7 +544,7 @@ def _(ADAPTER_DIR, Image, eval_button, gc, io, mo, torch, val_tbl):
     print(f"scoring {EVAL_N} held-out curated val rows with base, then tuned ...")
     base_ans = run(None)
     tuned_ans = run(ADAPTER_DIR)
-    return EVAL_N, GRID_K, base_ans, rows, score_one, tuned_ans
+    return EVAL_N, GRID_K, base_ans, rows, tuned_ans
 
 
 @app.cell
@@ -625,6 +620,344 @@ def _(mo):
     the lift was **0.799 → 0.820** (+2.1 pp).
     """)
     return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Appendix — helper code
+
+    The notebook is fully self-contained: instead of importing from a package, the
+    data and model plumbing lives in the three hidden cells below, frozen from
+    [lancedb/tmls-2026-demo](https://github.com/lancedb/tmls-2026-demo). That is why
+    "Open in molab" needs only this one file.
+
+    The code is hidden, not gone — each cell shows a one-line summary of what it
+    defines. To read one, select the cell and choose **Show code** from its menu.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(Image, io, mo, re, torch):
+    # ── Eval helpers (from vlm/eval.py) ─────────────────────────────────────
+    import base64
+
+    QWEN_MODEL_ID = "Qwen/Qwen2.5-VL-3B-Instruct"
+    TEXTVQA_HINT = "Answer the question using a single word or short phrase, no explanation."
+
+    # Official TextVQA scoring: min(matches/3, 1) with text normalisation.
+    PUNCT_RE = re.compile(r"[\.\,\!\?\;\:\(\)\"]+")
+    WHITE_RE = re.compile(r"\s+")
+    ARTICLES = {"a", "an", "the"}
+
+    def normalise(s):
+        s = s.strip().lower()
+        s = PUNCT_RE.sub("", s)
+        s = WHITE_RE.sub(" ", s)
+        return " ".join(t for t in s.split() if t not in ARTICLES)
+
+    def score_one(pred, gts):
+        if not pred:
+            return 0.0
+        p = normalise(pred)
+        return min(sum(1 for g in gts if normalise(g) == p) / 3.0, 1.0)
+
+    def b64_thumb(image_bytes, size=192):
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        img.thumbnail((size, size))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=80)
+        return base64.b64encode(buf.getvalue()).decode("ascii")
+
+    def load_model(adapter_dir, load_4bit=False):
+        """Full Qwen2.5-VL (vision tower included), optionally with a LoRA adapter."""
+        from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+
+        kwargs = dict(attn_implementation="sdpa")
+        if load_4bit:
+            from transformers import BitsAndBytesConfig
+
+            kwargs["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_use_double_quant=True,
+            )
+            kwargs["device_map"] = {"": 0}
+        else:
+            kwargs["torch_dtype"] = torch.bfloat16
+            kwargs["device_map"] = "cuda:0"
+
+        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(QWEN_MODEL_ID, **kwargs)
+        if adapter_dir:
+            from peft import PeftModel
+
+            model = PeftModel.from_pretrained(model, adapter_dir)
+            # merge_and_unload can't fold LoRA into 4-bit weights; keep the
+            # adapter active for generation in that case.
+            if not load_4bit:
+                model = model.merge_and_unload()
+        model.eval()
+        processor = AutoProcessor.from_pretrained(QWEN_MODEL_ID)
+        return model, processor
+
+    @torch.no_grad()
+    def generate(model, processor, image, question, max_new_tokens=16):
+        messages = [{"role": "user", "content": [
+            {"type": "image", "image": image},
+            {"type": "text", "text": f"{question}\n\n{TEXTVQA_HINT}"},
+        ]}]
+        text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        inputs = processor(text=[text], images=[image], return_tensors="pt").to("cuda:0")
+        out = model.generate(
+            **inputs, max_new_tokens=max_new_tokens, do_sample=False,
+            pad_token_id=processor.tokenizer.eos_token_id,
+        )
+        gen = out[0][inputs["input_ids"].shape[1]:]
+        return processor.tokenizer.decode(gen, skip_special_tokens=True).strip()
+
+    mo.md(
+        "**Hidden cell · eval helpers** (from `vlm/eval.py`): "
+        "`score_one` — official TextVQA accuracy · "
+        "`load_model` — full Qwen2.5-VL, optionally with the LoRA adapter · "
+        "`generate` — greedy short-answer generation · "
+        "`b64_thumb` — JPEG thumbnails for the galleries. "
+        "*To read the code, choose “Show code” in this cell's menu.*"
+    )
+    return QWEN_MODEL_ID, b64_thumb, generate, load_model, score_one
+
+
+@app.cell(hide_code=True)
+def _(lancedb, mo, np, torch):
+    # ── LanceDB dataloader (from vlm/dataloader.py + vlm/schema.py) ─────────
+    from dataclasses import dataclass
+    from pathlib import Path
+
+    import pyarrow as pa
+    from lancedb.permutation import Permutation
+
+    # Locked vision params: 560 px, patch 14, spatial merge 2
+    # -> 400 LLM tokens per image x 2048 hidden dims, 512-token text budget.
+    LLM_TOKENS_PER_IMAGE = 400
+    VISION_HIDDEN = 2048
+    MAX_TEXT_TOKENS = 512
+
+    TOKEN_FIELDS = ("input_ids", "attention_mask", "labels")
+    CACHED_FLAT_COLS = ["vision_tower_hiddens", *TOKEN_FIELDS]
+    CACHED_STRUCT_COLS = ["vision_tower_hiddens", "sft_tokens"]
+
+    def split_db(db):
+        """``data/textvqa.lance`` -> ``("data", "textvqa")`` for lancedb.connect."""
+        p = Path(db)
+        name = p.name[: -len(".lance")] if p.name.endswith(".lance") else p.name
+        return str(p.parent), name
+
+    def as_array(col):
+        """RecordBatch columns are Arrays; Table columns are ChunkedArrays."""
+        return col.combine_chunks() if isinstance(col, pa.ChunkedArray) else col
+
+    @dataclass
+    class CachedBatch:
+        vision_hiddens: torch.Tensor  # fp16 [B, LLM_TOKENS_PER_IMAGE, VISION_HIDDEN]
+        input_ids: torch.Tensor  # int64 [B, MAX_TEXT_TOKENS]
+        attention_mask: torch.Tensor
+        labels: torch.Tensor
+
+        def to(self, device, non_blocking=True):
+            return CachedBatch(
+                vision_hiddens=self.vision_hiddens.to(device, non_blocking=non_blocking),
+                input_ids=self.input_ids.to(device, non_blocking=non_blocking),
+                attention_mask=self.attention_mask.to(device, non_blocking=non_blocking),
+                labels=self.labels.to(device, non_blocking=non_blocking),
+            )
+
+    def cached_collate(batch):
+        bsz = batch.num_rows
+        flat_v = as_array(batch.column("vision_tower_hiddens")).values.to_numpy(zero_copy_only=False)
+        vision = torch.from_numpy(flat_v.reshape(bsz, LLM_TOKENS_PER_IMAGE, VISION_HIDDEN))
+
+        # Tokens live either as flat columns (direct backfill) or inside an
+        # ``sft_tokens`` struct (Geneva sft_tokens UDF). Handle both.
+        if "sft_tokens" in batch.schema.names:
+            struct = as_array(batch.column("sft_tokens"))
+            get = struct.field
+        else:
+            get = lambda f: as_array(batch.column(f))
+
+        def to_long(arr):
+            flat = arr.values.to_numpy(zero_copy_only=False).astype(np.int64, copy=False)
+            return torch.from_numpy(flat.reshape(bsz, MAX_TEXT_TOKENS)).to(torch.long)
+
+        return CachedBatch(
+            vision_hiddens=vision,
+            input_ids=to_long(get("input_ids")),
+            attention_mask=to_long(get("attention_mask")),
+            labels=to_long(get("labels")),
+        )
+
+    class LancePermutationDataset(torch.utils.data.Dataset):
+        """Stores connection params; each worker reopens its own Permutation."""
+
+        def __init__(self, uri, table_name, columns):
+            self.uri = uri
+            self.table_name = table_name
+            self.columns = columns
+            self.perm = None
+            self.length = len(lancedb.connect(uri).open_table(table_name))
+
+        def __len__(self):
+            return self.length
+
+        def __getstate__(self):
+            # Permutation holds Rust async state — zero it so each worker reopens its own.
+            state = self.__dict__.copy()
+            state["perm"] = None
+            return state
+
+        def ensure_open(self):
+            if self.perm is None:
+                db = lancedb.connect(self.uri)
+                self.perm = (
+                    Permutation.identity(db.open_table(self.table_name))
+                    .select_columns(self.columns)
+                    .with_format("arrow")
+                )
+
+        def __getitem__(self, idx):
+            self.ensure_open()
+            return self.perm[idx]
+
+        def __getitems__(self, indices):
+            self.ensure_open()
+            return self.perm.__getitems__(indices)
+
+    def make_cached_loader(db, batch_size=2, num_workers=0, shuffle=True, seed=42):
+        """DataLoader over the cached tier-3 columns (zero vision-tower work)."""
+        uri, table_name = split_db(db)
+        tbl_names = set(lancedb.connect(uri).open_table(table_name).schema.names)
+        struct = "sft_tokens" in tbl_names and not set(TOKEN_FIELDS) <= tbl_names
+        columns = CACHED_STRUCT_COLS if struct else CACHED_FLAT_COLS
+        dataset = LancePermutationDataset(uri, table_name, columns)
+        sampler = None
+        if shuffle:
+            g = torch.Generator()
+            g.manual_seed(seed)
+            sampler = torch.utils.data.RandomSampler(dataset, generator=g)
+        return torch.utils.data.DataLoader(
+            dataset,
+            batch_size=batch_size,
+            sampler=sampler,
+            shuffle=False,
+            num_workers=num_workers,
+            collate_fn=cached_collate,
+            pin_memory=torch.cuda.is_available(),
+            prefetch_factor=2 if num_workers > 0 else None,
+            persistent_workers=(num_workers > 0),
+            multiprocessing_context="spawn" if num_workers > 0 else None,
+        )
+
+    mo.md(
+        "**Hidden cell · LanceDB dataloader** (from `vlm/dataloader.py` + "
+        "`vlm/schema.py`): `make_cached_loader` — a torch `DataLoader` that reads "
+        "the cached `vision_tower_hiddens` + token columns straight off the Lance "
+        "table via the Permutation API. "
+        "*To read the code, choose “Show code” in this cell's menu.*"
+    )
+    return (make_cached_loader,)
+
+
+@app.cell(hide_code=True)
+def _(QWEN_MODEL_ID, mo, torch):
+    # ── Training helpers (from vlm/train_qwen25vl_lora.py) ──────────────────
+    IMAGE_PAD_TOKEN = "<|image_pad|>"
+
+    def build_model(use_lora, lora_r, load_4bit=False):
+        """Load Qwen2.5-VL with the vision tower deleted; optional NF4 + LoRA.
+
+        The vision tower is ~1.3 GB; not loading it frees that much VRAM. With
+        ``load_4bit`` the LLM weights are NF4-quantised (bitsandbytes) so the
+        3.75 B-param model plus LoRA fits a small GPU.
+        """
+        from transformers import Qwen2_5_VLForConditionalGeneration
+
+        kwargs = dict(attn_implementation="sdpa")
+        if load_4bit:
+            from transformers import BitsAndBytesConfig
+
+            kwargs["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_use_double_quant=True,
+            )
+            kwargs["device_map"] = {"": 0}
+        else:
+            kwargs["torch_dtype"] = torch.bfloat16
+            kwargs["device_map"] = "cuda:0"
+
+        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(QWEN_MODEL_ID, **kwargs)
+
+        # Free the vision tower weights — its output is already cached in Lance.
+        del model.model.visual
+        model.model.visual = None
+        torch.cuda.empty_cache()
+
+        if load_4bit and use_lora:
+            # QLoRA: cast norms to fp32, enable input grads, gradient checkpointing.
+            from peft import prepare_model_for_kbit_training
+
+            model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
+
+        if use_lora:
+            from peft import LoraConfig, get_peft_model
+
+            config = LoraConfig(
+                r=lora_r,
+                lora_alpha=lora_r * 2,
+                lora_dropout=0.05,
+                bias="none",
+                target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+                task_type="CAUSAL_LM",
+            )
+            model = get_peft_model(model, config)
+            model.print_trainable_parameters()
+        else:
+            for p in model.parameters():
+                p.requires_grad = True
+
+        return model
+
+    def forward_cached(model, batch, image_pad_id):
+        """Inject cached vision hiddens at <|image_pad|> positions and run the LLM."""
+        # Discover the actual nn.Module behind PEFT wrappers.
+        base = model.get_base_model() if hasattr(model, "get_base_model") else model
+        embed = base.model.get_input_embeddings()
+        inputs_embeds = embed(batch.input_ids)  # [B, T, D]
+
+        # Mask = (input_ids == <|image_pad|>) broadcast over the hidden dim.
+        mask = (batch.input_ids == image_pad_id).unsqueeze(-1).expand_as(inputs_embeds)
+
+        # vision_hiddens: fp16 [B, tokens, D] -> LLM dtype; masked_scatter
+        # consumes the matching number of elements row-major.
+        vision_flat = batch.vision_hiddens.to(inputs_embeds.dtype).reshape(-1, inputs_embeds.shape[-1])
+        inputs_embeds = inputs_embeds.masked_scatter(mask, vision_flat)
+
+        out = model(
+            inputs_embeds=inputs_embeds,
+            attention_mask=batch.attention_mask,
+            labels=batch.labels,
+        )
+        return out.loss
+
+    mo.md(
+        "**Hidden cell · training helpers** (from `vlm/train_qwen25vl_lora.py`): "
+        "`build_model` — 4-bit Qwen2.5-VL with the vision tower deleted, wrapped in "
+        "LoRA · `forward_cached` — injects the cached vision hiddens at the "
+        "`<|image_pad|>` positions and returns the loss. "
+        "*To read the code, choose “Show code” in this cell's menu.*"
+    )
+    return IMAGE_PAD_TOKEN, build_model, forward_cached
 
 
 if __name__ == "__main__":
