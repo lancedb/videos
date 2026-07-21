@@ -21,7 +21,7 @@ transition: slide-left
 layout: cover
 ---
 
-<Eyebrow>Vision model fine-tuning</Eyebrow>
+<Eyebrow>Model training and fine-tuning</Eyebrow>
 
 # Fine-tune your models faster <span class="gradient-text">with materialized model features</span>
 
@@ -34,10 +34,8 @@ How Lance's zero-copy data evolution and fast retrieval let you fine-tune a VLM 
 ![Vector computer illustration](./assets/hero.png)
 
 <!--
-Beat 1 · 0:00–0:40 (cover is the first ~15s).
-Frame the video in one sentence: fine-tuning a vision-language model wastes
-GPU time recomputing something that never changes — and the fix is a data
-format feature, not a modeling trick.
+If you train or fine-tune vision language models, you're probably wasting a lot of compute on things that never change. In the next five minutes I'll
+show you how LanceDB fixes this with the Lance format.
 -->
 
 ---
@@ -46,7 +44,7 @@ format feature, not a modeling trick.
 
 <div class="task-cols">
 <div>
-  <img src="/textvqa-diff.png" alt="TextVQA examples on a TWA sugar packet — questions and the answers read from the image" class="task-img" />
+  <img :src="'/textvqa-diff.png'" alt="TextVQA examples on a TWA sugar packet — questions and the answers read from the image" class="task-img" />
   <div class="task-cap">Each example: an image + a question + the answer + the OCR text read off it. Answers come straight from the packet's print.<br>Dataset: <a href="https://textvqa.org/" target="_blank">textvqa.org ↗</a></div>
 </div>
 <div>
@@ -80,13 +78,14 @@ format feature, not a modeling trick.
 </style>
 
 <!--
-Beat 1 · 0:00–0:40 (remainder).
-Show the real examples: this is TextVQA — the answer is text printed inside the
-image (the sugar packet says "Domino"), so the model has to read the picture, not
-just recognize objects. Then the two-stage mechanic: image encoder → visual
-embeddings, language model → answer. Why fine-tune at all? A base model is broad
-but misses domain specifics; SFT shows it many (image, question, answer) examples
-so it answers our questions better. Next: the hidden cost of running this loop.
+Our task is TextVQA: that is, answer a question about an image where the answer is in text embedded inside the image. What brand is this packet of sugar? The model has to reason over the pixels pf the image and read the text on the packet, to say "Domino".
+
+This is visual question-answering in a nutshell. It has two stages: an image encoder turns the image into embeddings; THEN a language model reads those embeddings
+plus your question and generates the answer.
+
+Even if your base model is capable, it likely misses small domain details, like that tiny
+print on the label. Supervised fine-tuning is the answer: we show the model lots of image,
+question and answer examples until it gets good at our kind of questions.
 -->
 
 ---
@@ -109,7 +108,7 @@ class: flex flex-col justify-center
 </div>
 
 <div class="callout" style="margin-top: 16px;">
-  Precomputing is the speedup; <strong>Lance makes it painless</strong>: a cheap column add instead of a table rewrite, with no sidecar files. <strong>~2× faster steps, 1.3 GB less GPU memory.</strong>
+  Precomputing is the speedup; <strong>Lance makes it painless</strong>: a cheap column add instead of a table rewrite, with no sidecar files.<br/><strong>~2× the training throughput (16 vs 8 samples/sec) and 1.3 GB less GPU memory.</strong>
 </div>
 
 <style>
@@ -122,14 +121,19 @@ class: flex flex-col justify-center
 </style>
 
 <!--
-Beat 1→2 · ~1:00.
-The fix, and the payoff. The encoder is frozen, so compute its embeddings once
-up front rather than re-encoding every pass — that alone roughly doubles step
-throughput and frees ~1.3 GB of VRAM (the encoder leaves the device). The real
-question is where you store them: sidecar .npy/HDF5 files you align by hand, or a
-Parquet/Iceberg rewrite — both painful. With Lance you add them as a column on the
-same table: a cheap append, no rewrite, no sidecars. Next slide: why that append
-is free.
+There's some wasteful compute hidden in this process.
+During fine-tuning, the image encoder is frozen. The same
+image in, the same embeddings out, every single epoch. Yet, the standard training
+loop re-encodes every image on every pass. That's wasteful.
+
+The fix is to precompute those embeddings once. But where do you put them?
+Sidecar files may drift from the source data. Adding a column to the Parquet file
+may mean rewriting the whole table.
+
+With Lance, you add them as a column on the same table, and the dataloader
+reads them straight off disk. Each training step then processes about twice the
+throughput, roughly 16 versus 8 samples per second, and it frees over a gigabyte
+of GPU memory.
 -->
 
 ---
@@ -249,11 +253,14 @@ With Lance, creating new features is cheap enough that materializing results fro
 </style>
 
 <!--
-Beat 2 · 0:40–1:40.
-Anchor on the diagram: the table grows in two directions — new feature
-columns attach from the side, new observations append from below — and
-neither touches the existing data. Contrast with Parquet/Iceberg, where
-schema evolution means rewriting files. This cheapness is the whole trick:
-it makes "persist the frozen tower's output as a column" a one-liner.
-Hand off to the notebook: "let's do exactly that, on a real table."
+Adding columns is cheap because of what we call zero-copy data evolution.
+Lance tables grow in two directions. New
+feature columns are added alongside existing columns, and new observations append
+below existing rows.
+
+Neither touches the existing data files; only the new column's data gets
+written. No table rewrite, no sidecar files.
+
+With your data stored in Lance, materializing an expensive computation second nature.
+Let's look at that in a real fine-tuning loop.
 -->
