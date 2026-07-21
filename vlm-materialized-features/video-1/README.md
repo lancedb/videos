@@ -1,6 +1,6 @@
 # Video 1 — Compute it once, store it as a column
 
-[![Open in molab](https://marimo.io/molab-shield.svg)](https://molab.marimo.io/github/lancedb/videos/blob/main/vlm-materialized-features/video-1/01_finetune_vlm_lance.py)
+[![Open in molab](https://marimo.io/molab-shield.svg)](https://molab.marimo.io/github/lancedb/videos/blob/main/vlm-materialized-features/video-1/01_finetune_vlm_lancedb.py)
 
 Source code for video 1 of the *materialized model features* series, which breaks
 down the LanceDB blog post
@@ -16,7 +16,7 @@ off disk. The result is roughly 2x faster steps and about 1.3 GB less GPU memory
 
 ```
 video-1/
-├── 01_finetune_vlm_lance.py   # marimo notebook: the full fine-tune loop off one Lance table
+├── 01_finetune_vlm_lancedb.py   # marimo notebook: the full fine-tune loop off one Lance table
 └── slides/
     └── slides.md               # slidev deck (the video's opening frames)
 ```
@@ -29,7 +29,7 @@ including "Open in molab", brings everything along.
 
 ## The notebook
 
-`01_finetune_vlm_lance.py` runs the whole loop end to end, off a single Lance table:
+`01_finetune_vlm_lancedb.py` runs the whole loop end to end, off a single Lance table:
 
 1. **Download** a pre-baked, curated `text_dense` slice of TextVQA (the vision
    features are already computed and stored as the `vision_tower_hiddens` column).
@@ -46,11 +46,14 @@ eval) sit behind run buttons, so opening the notebook never starts a training ru
 
 ## How to run
 
-### Locally (macOS / no GPU): the data-layer sections
+### Locally (no GPU needed): the data-layer sections
+
+You need [uv](https://docs.astral.sh/uv/) installed (`uvx` ships with it). Clone
+this repo, then:
 
 ```bash
 cd vlm-materialized-features/video-1
-uvx marimo edit 01_finetune_vlm_lance.py --sandbox
+uvx marimo edit 01_finetune_vlm_lancedb.py --sandbox
 ```
 
 `--sandbox` builds an isolated environment from the PEP 723 header, so nothing
@@ -62,7 +65,7 @@ bitsandbytes) and takes a few minutes, cached after that.
 To open it read-only as an app instead of the editor:
 
 ```bash
-uvx marimo run 01_finetune_vlm_lance.py --sandbox
+uvx marimo run 01_finetune_vlm_lancedb.py --sandbox
 ```
 
 ### On molab (full run, with GPU)
@@ -70,8 +73,10 @@ uvx marimo run 01_finetune_vlm_lance.py --sandbox
 The fine-tune and eval sections need a CUDA GPU (about 5 GB VRAM is plenty). molab
 provides one:
 
-1. Open the notebook on molab (or click the badge at the top of this README):
-   `https://molab.marimo.io/github/lancedb/videos/blob/main/vlm-materialized-features/video-1/01_finetune_vlm_lance.py`
+1. Click the **Open in molab** badge at the top of this README (the notebook's
+   title cell carries the same badge). It opens this notebook on the molab server
+   with no local setup. Direct link:
+   `https://molab.marimo.io/github/lancedb/videos/blob/main/vlm-materialized-features/video-1/01_finetune_vlm_lancedb.py`
 2. Toggle the GPU on via the notebook specs button in the app header.
 3. Run all, then click **Run fine-tune** and **Run before/after eval**.
 

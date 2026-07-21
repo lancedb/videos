@@ -38,8 +38,9 @@ table, cheapest to most expensive, using one abstraction:
    decorator, same backfill call, only the body changed. Live on CPU.
 3. **Tier 3, `vision_tower_hiddens`** — a stateful class UDF that lazy-loads a frozen
    vision model and emits a fixed-size vector per image. Gated behind a run button
-   (needs a GPU). It is already present on the shipped table, so the cell walks the
-   UDF and the exact backfill call that produced it.
+   (needs a GPU): clicking it runs the model over all 600 images and writes the
+   column, with the knobs that matter at scale (`concurrency`, `task_size`,
+   `checkpoint_size`).
 
 A hidden appendix cell shows the same Tier-3 work written by hand (a single-process
 runner) for contrast: the plumbing you would otherwise maintain yourself, on one
@@ -50,7 +51,10 @@ environment.
 
 ## How to run
 
-### Locally (macOS / no GPU): Tiers 1 and 2
+### Locally (no GPU needed): Tiers 1 and 2
+
+You need [uv](https://docs.astral.sh/uv/) installed (`uvx` ships with it). Clone
+this repo, then:
 
 ```bash
 cd vlm-materialized-features/video-2
@@ -66,7 +70,9 @@ and takes a few minutes, cached after that.
 
 The Tier 3 backfill needs a CUDA GPU (about 5 GB VRAM). molab provides one:
 
-1. Open the notebook on molab (or click the badge at the top of this README):
+1. Click the **Open in molab** badge at the top of this README (the notebook's
+   title cell carries the same badge). It opens this notebook on the molab server
+   with no local setup. Direct link:
    `https://molab.marimo.io/github/lancedb/videos/blob/main/vlm-materialized-features/video-2/02_feature_engineering.py`
 2. Toggle the GPU on via the notebook specs button in the app header.
 3. Run all, then click **Run Tier 3 backfill**.
@@ -86,9 +92,9 @@ npx slidev vlm-materialized-features/video-2/slides/slides.md --open
 - **GPU torch:** the header's plain `torch` installs the CPU build from PyPI, which
   is fine for Tiers 1 and 2. On molab with a GPU the environment supplies the CUDA
   build. On your own GPU box, install a CUDA torch wheel explicitly.
-- **First run:** the backfill path (a local compute context for Tiers 1 and 2, and
-  Tier 3 on GPU) should be exercised on molab before recording, the same way video 1
-  was verified.
+- **Version pins:** `geneva`, `lancedb`, and `pylance` are pinned exactly in the
+  notebook header. geneva releases track specific lancedb versions, so do not bump
+  any of the three independently.
 - **Data:** the subset is the public Hugging Face dataset
   [`lance-format/textvqa-lance-colab`](https://huggingface.co/datasets/lance-format/textvqa-lance-colab)
   (600 train rows). No token needed.

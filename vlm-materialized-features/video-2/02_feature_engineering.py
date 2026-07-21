@@ -481,7 +481,7 @@ def _(mo):
     each a zero-copy column add. The expensive computations are now materialized on
     the same table that holds the raw data, ready for a training loop to read them
     straight off disk. Here is the final schema, with the columns this notebook
-    added highlighted:
+    added marked in the **New** column:
     """)
     return
 
@@ -521,7 +521,7 @@ def _(DEMO_DIR, TABLE_NAME, lancedb, mo, tier1_done, tier2_done):
             mo.md(
                 f"**{len(schema.names)} columns**: the raw data plus "
                 f"**{len(new_idx)} feature columns**, each defined as a UDF and "
-                "materialized one backfill at a time (highlighted rows)."
+                "materialized one backfill at a time."
             ),
             schema_table,
         ]
