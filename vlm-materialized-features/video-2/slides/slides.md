@@ -177,17 +177,17 @@ class: flex flex-col justify-center
 <div class="ft-tiers">
   <div class="ft-tier">
     <div class="ft-badge">Tier 1</div>
-    <div class="ft-body"><strong>Text signals</strong> · question type, lengths, token counts</div>
+    <div class="ft-body"><strong>Text features</strong> · question type, lengths, token counts</div>
     <div class="ft-cost">CPU · seconds</div>
   </div>
   <div class="ft-tier">
     <div class="ft-badge">Tier 2</div>
-    <div class="ft-body"><strong>Image-decode features</strong> · a perceptual hash to catch near-duplicates</div>
+    <div class="ft-body"><strong>Image-decode features</strong> · a perceptual or difference hash to deduplicate images</div>
     <div class="ft-cost">CPU · minutes</div>
   </div>
   <div class="ft-tier ft-hot">
     <div class="ft-badge">Tier 3</div>
-    <div class="ft-body"><strong>Model features</strong> · frozen vision-tower embeddings, pre-tokenized prompts</div>
+    <div class="ft-body"><strong>Model features</strong> · frozen vision-tower embeddings, pre-tokenized lists/arrays</div>
     <div class="ft-cost">GPU · the expensive one</div>
   </div>
 </div>
@@ -195,17 +195,18 @@ class: flex flex-col justify-center
 <div class="ft-abs">
   <div class="ft-abs-row">
     <div class="ft-abs-k">You write</div>
-    <div class="ft-abs-v">a plain Python function that turns one row into a feature (a <strong>UDF</strong>)</div>
+    <div class="ft-abs-v">a plain Python function, marked as a UDF, that turns one row into a feature</div>
   </div>
 <pre class="ft-code">@udf(data_type=str)
 def question_type(question):
-    ...                 # your logic
+    # your logic
+    # ...                 
     return label</pre>
   <div class="ft-abs-row">
-    <div class="ft-abs-k">It handles</div>
-    <div class="ft-abs-v">batching, checkpointing, resuming after a failure, and spreading the work across your compute</div>
+    <div class="ft-abs-k">LanceDB handles</div>
+    <div class="ft-abs-v">distributing the compute, checkpointing/resuming after a failure, and versioning both the transforms and the data</div>
   </div>
-  <div class="ft-note">The same function runs on a laptop or a whole cluster.</div>
+  <div class="ft-note">The same function runs on a laptop or an Enterprise cluster.</div>
 </div>
 
 </div>
@@ -262,12 +263,10 @@ def question_type(question):
 <!--
 During training or fine-tuning, there are many kinds of features you may want to compute. Simple text features generated via regular expressions or classifiers run on pure CPU, in seconds.
 
-In the next tier, you have image features like computing a perceptual hash for image deduplication. 
+In the next tier, you have image features like computing a perceptual or difference hash for image deduplication. 
 At the third, most expensive tier, you need model features that require a GPU. For fine-tuning VLMs, this means extracting the frozen hidden layers and token embeddings and precomputing them for each image.
 
-The three tiers involve very different costs, but the way you define each one is the same: a plain
-Python function that turns a row into a feature. A UDF. LanceDB provides the feature
-engineering capabilities to create batches, checkpoints in case of failures, and distributing the compute. Run your code the same way, on laptop or cluster.
+The three tiers involve very different costs, but the way you define each one is the same: a Python UDF that transforms a row into a feature. Define your logic inside the function, and . LanceDB distributing the compute, checkpoints in case of failures, and versions both the transforms and the data. Run your code the same way, on laptop or cluster.
 
 Let's understand how this works by looking at a real example.
 -->
