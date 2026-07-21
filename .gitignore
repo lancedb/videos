@@ -6,6 +6,9 @@ dist/
 wheels/
 *.egg-info
 
+# Env vars and secrets
+.env
+
 # Virtual environments
 .venv
 
@@ -18,6 +21,7 @@ package-lock.json
 .claude/
 .codex/
 scratch/
+.DS_Store
 
 # marimo session cache (regenerated; commit a clean snapshot deliberately)
 __marimo__/
