@@ -72,7 +72,6 @@ def _():
     import warnings
 
     import geneva
-    import lance
     import lancedb
     import numpy as np
     import pyarrow as pa
@@ -82,7 +81,7 @@ def _():
     warnings.filterwarnings("ignore", message=r"_check_is_size.*", category=FutureWarning)
 
     HAS_GPU = torch.cuda.is_available()
-    return HAS_GPU, geneva, lance, lancedb, np, pa, re, torch, udf
+    return HAS_GPU, geneva, lancedb, np, pa, re, torch, udf
 
 
 @app.cell(hide_code=True)
@@ -110,7 +109,7 @@ def _(mo):
 
 
 @app.cell
-def _(geneva, lance, lancedb):
+def _(geneva, lancedb):
     from huggingface_hub import snapshot_download
 
     LOCAL = snapshot_download(
@@ -119,32 +118,30 @@ def _(geneva, lance, lancedb):
         local_dir="data/colab",
     )
 
+    # The downloaded table (it ships CLIP embeddings, used by the search demo below).
+    train_tbl = lancedb.connect(LOCAL).open_table("textvqa_colab_train")
+
     # Project just the raw columns into a fresh table: every feature column the
     # notebook adds from here on is genuinely new. (The download also ships the
     # precomputed features; we deliberately leave those behind.)
     RAW_COLS = ["id", "image", "question", "answer"]
-    raw = lance.dataset(f"{LOCAL}/textvqa_colab_train.lance").to_table(columns=RAW_COLS)
+    raw = train_tbl.search().select(RAW_COLS).limit(train_tbl.count_rows()).to_arrow()
 
     DEMO_DIR = "data/demo"
     TABLE_NAME = "textvqa_raw"
-    DEMO_PATH = f"{DEMO_DIR}/{TABLE_NAME}.lance"
-    lance.write_dataset(raw, DEMO_PATH, mode="overwrite")
+    lancedb.connect(DEMO_DIR).create_table(TABLE_NAME, raw, mode="overwrite")
 
-    # geneva handle for feature engineering (backfills); plain Lance handles for reads.
-    gdb = geneva.connect(DEMO_DIR)
-
-    # A LanceDB handle on the downloaded table (it ships CLIP embeddings), for the
-    # cross-modal search demo below.
-    train_tbl = lancedb.connect(LOCAL).open_table("textvqa_colab_train")
+    # geneva handle for feature engineering (backfills).
+    db = geneva.connect(DEMO_DIR)
 
     def read_columns(cols, limit=None):
-        ds = lance.dataset(DEMO_PATH)  # reopened each call to pick up new columns
-        n = ds.count_rows() if limit is None else min(limit, ds.count_rows())
-        return ds.to_table(columns=cols, limit=n).to_pandas()
+        tbl = lancedb.connect(DEMO_DIR).open_table(TABLE_NAME)  # reopen to pick up new columns
+        n = tbl.count_rows() if limit is None else min(limit, tbl.count_rows())
+        return tbl.search().select(cols).limit(n).to_pandas()
 
     print("rows   :", raw.num_rows)
     print("columns:", raw.schema.names)
-    return DEMO_PATH, TABLE_NAME, gdb, read_columns, train_tbl
+    return DEMO_DIR, TABLE_NAME, db, read_columns, train_tbl
 
 
 @app.cell(hide_code=True)
@@ -250,14 +247,14 @@ def _(pa, re, udf):
 
 
 @app.cell
-def _(TABLE_NAME, gdb, question_type):
+def _(TABLE_NAME, db, question_type):
     # Define what the column is, then materialize it. LanceDB's feature engineering
     # runs the UDF over the table inside a local compute context (workers on this
     # machine); at scale the same call fans out across a cluster.
-    _table = gdb.open_table(TABLE_NAME)
+    _table = db.open_table(TABLE_NAME)
     if "question_type" not in {f.name for f in _table.schema}:
         _table.add_columns({"question_type": question_type})
-        with gdb.local_ray_context():
+        with db.local_ray_context():
             _table.backfill("question_type", udf=question_type, concurrency=2, task_size=256)
     tier1_done = "question_type"
     return (tier1_done,)
@@ -307,11 +304,11 @@ def _(pa, udf):
 
 
 @app.cell
-def _(TABLE_NAME, dhash, gdb):
-    _table = gdb.open_table(TABLE_NAME)
+def _(TABLE_NAME, db, dhash):
+    _table = db.open_table(TABLE_NAME)
     if "dhash" not in {f.name for f in _table.schema}:
         _table.add_columns({"dhash": dhash})
-        with gdb.local_ray_context():
+        with db.local_ray_context():
             _table.backfill("dhash", udf=dhash, concurrency=2, task_size=256)
     tier2_done = "dhash"
     return (tier2_done,)
@@ -409,19 +406,19 @@ def _(pa, torch, udf):
 
 
 @app.cell
-def _(HAS_GPU, TABLE_NAME, gdb, mo, t3_button, vision_tower_hiddens):
+def _(HAS_GPU, TABLE_NAME, db, mo, t3_button, vision_tower_hiddens):
     mo.stop(not HAS_GPU, mo.md("> ⚠️ **GPU required.** Enable a GPU in the notebook specs, then re-run."))
     mo.stop(not t3_button.value, mo.md("> ▶ Click **Run Tier 3 backfill** above."))
 
     import time
 
-    _table = gdb.open_table(TABLE_NAME)
+    _table = db.open_table(TABLE_NAME)
     if "vision_tower_hiddens" in {f.name for f in _table.schema}:
         _msg = "`vision_tower_hiddens` is already on the table (backfilled earlier in this session)."
     else:
         _t0 = time.time()
         _table.add_columns({"vision_tower_hiddens": vision_tower_hiddens})
-        with gdb.local_ray_context():
+        with db.local_ray_context():
             _table.backfill(
                 "vision_tower_hiddens", udf=vision_tower_hiddens,
                 concurrency=1, task_size=128, checkpoint_size=64,  # one worker per GPU
@@ -447,10 +444,14 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(lance, np, pa):
+def _(np, pa):
     # The hand-rolled single-process alternative to a feature-engineering backfill.
     # Reuses the same embedder logic, but you own the batching, the Arrow packing,
-    # and the partial-state teardown, and there is no distribution.
+    # and the partial-state teardown, and there is no distribution. This is the one
+    # place the notebook drops below the LanceDB API, to the low-level lance library:
+    # that is the point of the contrast.
+    import lance
+
     def hand_rolled_tier3(train_path, embed, llm_tokens, vision_hidden, batch_size=8):
         ds = lance.dataset(train_path)
         v_dim = llm_tokens * vision_hidden
@@ -486,7 +487,7 @@ def _(mo):
 
 
 @app.cell
-def _(DEMO_PATH, lance, mo, tier1_done, tier2_done):
+def _(DEMO_DIR, TABLE_NAME, lancedb, mo, tier1_done, tier2_done):
     _ = (tier1_done, tier2_done)  # depend on the backfills so this runs after them
 
     FEATURES = {
@@ -494,7 +495,7 @@ def _(DEMO_PATH, lance, mo, tier1_done, tier2_done):
         "dhash": "Tier 2 backfill · dhash UDF",
         "vision_tower_hiddens": "Tier 3 backfill · vision-tower UDF",
     }
-    schema = lance.dataset(DEMO_PATH).schema
+    schema = lancedb.connect(DEMO_DIR).open_table(TABLE_NAME).schema
     new_idx = {i for i, f in enumerate(schema) if f.name in FEATURES}
     schema_rows = [
         {
@@ -506,13 +507,6 @@ def _(DEMO_PATH, lance, mo, tier1_done, tier2_done):
         for f in schema
     ]
 
-    def _style(row_id, _column, _value):
-        # Highlight the feature columns this notebook added.
-        try:
-            return {"backgroundColor": "#e6ffe6"} if int(row_id) in new_idx else {}
-        except (TypeError, ValueError):
-            return {}
-
     schema_table = mo.ui.table(
         schema_rows,
         selection=None,
@@ -521,7 +515,6 @@ def _(DEMO_PATH, lance, mo, tier1_done, tier2_done):
         show_data_types=False,
         wrapped_columns=["Type", "Source"],
         text_justify_columns={"New": "center"},
-        style_cell=_style,
     )
     mo.vstack(
         [
