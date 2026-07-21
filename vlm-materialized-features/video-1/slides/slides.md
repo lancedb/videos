@@ -34,13 +34,8 @@ How Lance's zero-copy data evolution and fast retrieval let you fine-tune a VLM 
 ![Vector computer illustration](./assets/hero.png)
 
 <!--
-0:00–0:15 · ~15s · SAY:
-
-If you train or fine-tune vision language models, you're probably wasting a lot of GPU
-time recomputing something that never changes. In the next five minutes I'll
-show you how LanceDB fixes that the Lance format format.
-
-[advance]
+If you train or fine-tune vision language models, you're probably wasting a lot of compute on things that never change. In the next five minutes I'll
+show you how LanceDB fixes this with the Lance format.
 -->
 
 ---
@@ -83,19 +78,14 @@ show you how LanceDB fixes that the Lance format format.
 </style>
 
 <!--
-0:15–0:55 · ~40s · SAY:
-
 Our task is TextVQA: that is, answer a question about an image where the answer is in text embedded inside the image. What brand is this packet of sugar? The model has to reason over the pixels pf the image and read the text on the packet, to say "Domino".
 
-This is visual question-answering in a nutshell. It has two stages: an image encoder turns the
-image into embeddings; THEN a language model reads those embeddings
+This is visual question-answering in a nutshell. It has two stages: an image encoder turns the image into embeddings; THEN a language model reads those embeddings
 plus your question and generates the answer.
 
 Even if your base model is capable, it likely misses small domain details, like that tiny
-print on the label. So we fine-tune the base model: we show the model lots of image,
-question, answer examples until it gets good at our kind of questions.
-
-[advance]
+print on the label. Supervised fine-tuning is the answer: we show the model lots of image,
+question and answer examples until it gets good at our kind of questions.
 -->
 
 ---
@@ -131,12 +121,10 @@ class: flex flex-col justify-center
 </style>
 
 <!--
-0:55–1:35 · ~40s · SAY:
-
 There's some wasteful compute hidden in this process.
 During fine-tuning, the image encoder is frozen. The same
 image in, the same embeddings out, every single epoch. Yet, the standard training
-loop re-encodes every image on every pass. That's wasted GPU.
+loop re-encodes every image on every pass. That's wasteful.
 
 The fix is to precompute those embeddings once. But where do you put them?
 Sidecar files may drift from the source data. Adding a column to the Parquet file
@@ -146,8 +134,6 @@ With Lance, you add them as a column on the same table, and the dataloader
 reads them straight off disk. Each training step then processes about twice the
 throughput, roughly 16 versus 8 samples per second, and it frees over a gigabyte
 of GPU memory.
-
-[advance]
 -->
 
 ---
@@ -267,15 +253,14 @@ With Lance, creating new features is cheap enough that materializing results fro
 </style>
 
 <!--
-1:35–2:00 · ~25s · SAY:
+Adding columns is cheap because of what we call zero-copy data evolution.
+Lance tables grow in two directions. New
+feature columns are added alongside existing columns, and new observations append
+below existing rows.
 
-So why is adding that column cheap? Lance tables grow in two directions. New
-feature columns attach alongside the existing data, and new rows append below.
-Neither touches the bytes you already wrote; only the new column's data gets
+Neither touches the existing data files; only the new column's data gets
 written. No table rewrite, no sidecar files.
 
-That's what makes materializing an expensive computation second nature.
-Alright, let's do exactly that, on a real table.
-
-[cut to the notebook — 3:00 for the code walkthrough]
+With your data stored in Lance, materializing an expensive computation second nature.
+Let's look at that in a real fine-tuning loop.
 -->
