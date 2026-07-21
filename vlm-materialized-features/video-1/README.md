@@ -17,17 +17,15 @@ off disk. The result is roughly 2x faster steps and about 1.3 GB less GPU memory
 ```
 video-1/
 ├── 01_finetune_vlm_lance.py   # marimo notebook: the full fine-tune loop off one Lance table
-├── vlm/                        # helper package, frozen from lancedb/tmls-2026-demo
-│   ├── schema.py               # the schema-enforced table definition
-│   ├── dataloader.py           # LanceDB Permutation-API dataloader
-│   ├── train_qwen25vl_lora.py  # QLoRA training building blocks
-│   └── eval.py                 # generation, scoring, thumbnail helpers
 └── slides/
     └── slides.md               # slidev deck (the video's opening frames)
 ```
 
-The `vlm/` package is a self-contained copy, frozen to match what appears on screen.
-It is not a dependency on the demo repo.
+The notebook is a single self-contained file. All helper code (the LanceDB
+Permutation dataloader, QLoRA training helpers, and the TextVQA scorer plus
+generation utilities) lives in hidden cells in an appendix at the bottom of the
+notebook, frozen from `lancedb/tmls-2026-demo`. Opening the notebook anywhere,
+including "Open in molab", brings everything along.
 
 ## The notebook
 
@@ -49,8 +47,6 @@ eval) sit behind run buttons, so opening the notebook never starts a training ru
 ## How to run
 
 ### Locally (macOS / no GPU): the data-layer sections
-
-Run from this directory so the `vlm/` package resolves:
 
 ```bash
 cd vlm-materialized-features/video-1
@@ -94,9 +90,10 @@ npx slidev vlm-materialized-features/video-1/slides/slides.md --open
 - **GPU torch:** the header's plain `torch` installs the CPU build from PyPI, which
   is fine for the data-layer cells. On molab with a GPU the environment supplies the
   CUDA build. On your own GPU box, install a CUDA torch wheel explicitly.
-- **lancedb version:** `dataloader.py` imports `lancedb.permutation.Permutation`.
-  Confirm that path still exists in the lancedb version that resolves, since the
-  header pins to recent floors. It surfaces when the fine-tune loader is built.
+- **lancedb version:** the dataloader helper cell imports
+  `lancedb.permutation.Permutation`. Confirm that path still exists in the lancedb
+  version that resolves, since the header pins to recent floors. It surfaces when
+  the fine-tune loader is built.
 - **Data:** the curated subset is the public Hugging Face dataset
   [`lance-format/textvqa-lance-colab`](https://huggingface.co/datasets/lance-format/textvqa-lance-colab)
   (600 train / 400 val rows). No token needed.
