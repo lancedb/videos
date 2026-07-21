@@ -2,9 +2,9 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "marimo",
-#     "lancedb>=0.30",
-#     "pylance>=0.18",
-#     "geneva",
+#     "lancedb>=0.30.2",
+#     "pylance>=3.0.0",
+#     "geneva==0.12.0",
 #     "pyarrow",
 #     "numpy",
 #     "pillow",
@@ -20,7 +20,7 @@
 import marimo
 
 __generated_with = "0.23.14"
-app = marimo.App(width="medium")
+app = marimo.App()
 
 
 @app.cell
