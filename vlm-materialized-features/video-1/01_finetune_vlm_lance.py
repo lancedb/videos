@@ -47,9 +47,9 @@ def _(mo):
     [TextVQA](https://textvqa.org) (read the text *in* an image, answer a question
     about it).
 
-    **The data:** a curated **text_dense** slice of TextVQA, the images packed with
-    the most OCR text. That is the slice where LoRA gives the clearest lift over the
-    already-strong base model.
+    **The data:** a curated **text_dense** slice of TextVQA: the quarter of the
+    corpus whose images carry the most OCR text. That is the slice where LoRA gives
+    the clearest lift over the already-strong base model.
 
     **Why it fits a small GPU:** the vision tower is the expensive part of a VLM. We
     run it **once**, offline, and store its output (`vision_tower_hiddens`) as a
@@ -116,9 +116,9 @@ def _(mo):
     Computing `vision_tower_hiddens` needs a GPU pass over the images, so we did that
     once, offline, and hosted the result. This notebook just downloads it:
 
-    - `textvqa_colab_train.lance` — curated train subset **with** the cached vision
-      features (`vision_tower_hiddens`) plus tokenised prompts
-    - `textvqa_colab_val.lance` — held-out curated val subset (raw images, for
+    - `textvqa_colab_train.lance`: the curated train subset, **with** the cached
+      vision features (`vision_tower_hiddens`) plus tokenised prompts
+    - `textvqa_colab_val.lance`: the held-out curated val subset (raw images, for
       before/after)
     """)
     return
@@ -160,11 +160,11 @@ def _(mo):
     mo.md(r"""
     ## 2 · Explore the curated data with LanceDB
 
-    Everything here reads straight from the Lance table through the LanceDB API: no
-    full-corpus load into pandas, no separate feature store. The table already ships
-    **CLIP image and text embeddings** (`image_emb`, `question_emb`, 512-d), **OCR
-    tokens**, and **object classes** next to the raw image bytes, so exploration and
-    the vector-search demo need zero extra compute.
+    Everything here reads straight from the Lance table through the LanceDB API;
+    nothing gets bulk-loaded into pandas, and there is no separate feature store to
+    stand up. The table already ships CLIP image and text embeddings (`image_emb`,
+    `question_emb`, 512-d), OCR tokens, and object classes next to the raw image
+    bytes, so exploration and the vector-search demo need zero extra compute.
     """)
     return
 
@@ -236,8 +236,9 @@ def _(mo):
 
     The table ships CLIP embeddings for the question text (`question_emb`) and the
     image (`image_emb`). So we can take one question's text embedding and ask LanceDB
-    for the images whose CLIP embedding is nearest: a text→image retrieval, no model
-    to load, just `tbl.search(...)`.
+    for the images whose CLIP embedding is nearest. That gives us text→image
+    retrieval without loading any model: the whole thing is one `tbl.search(...)`
+    call.
     """)
     return
 
@@ -377,16 +378,16 @@ def _(mo):
     mo.md(r"""
     ## 4 · QLoRA fine-tune, from the cached columns
 
-    We use the notebook's own helpers (`build_model`, `forward_cached`,
-    `make_cached_loader` — hidden cells in the appendix at the bottom) so this is
-    the real code path, driven inline.
+    We use the notebook's own helpers (`build_model`, `forward_cached`, and
+    `make_cached_loader`, defined in hidden cells in the appendix at the bottom), so
+    this is the real code path, driven inline.
 
     `build_model(..., load_4bit=True)` loads the LLM in 4-bit NF4 (~2 GB instead of
     ~7.5 GB), **deletes the vision tower** (we have its output cached), and wraps the
     LLM's q/k/v/o with a LoRA adapter. The loop pulls `vision_tower_hiddens` +
     `input_ids` + `labels` from Lance and injects the cached hiddens at the
-    `<|image_pad|>` positions. No vision tower, no image decode, no tokenization in
-    the loop.
+    `<|image_pad|>` positions. Inside the loop there is no vision tower to run and
+    no image to decode, and the text is already tokenized.
     """)
     return
 
@@ -625,7 +626,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Appendix — helper code
+    ## Appendix: helper code
 
     The notebook is fully self-contained: instead of importing from a package, the
     data and model plumbing lives in the three hidden cells below, frozen from
