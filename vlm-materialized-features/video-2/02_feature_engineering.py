@@ -402,7 +402,7 @@ def _(pa, torch, udf):
     vision_tower_hiddens = udf(
         data_type=pa.list_(pa.float16(), LLM_TOKENS_PER_IMAGE * VISION_HIDDEN),
         input_columns=["image"],
-    )(VisionTowerEmbedder)
+    )(VisionTowerEmbedder())
     return (vision_tower_hiddens,)
 
 
