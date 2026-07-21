@@ -1,0 +1,31 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Node (slidev decks)
+node_modules/
+package-lock.json
+
+# local
+.agents/
+.claude/
+.codex/
+scratch/
+
+# marimo session cache (regenerated; commit a clean snapshot deliberately)
+__marimo__/
+
+# Notebook-generated data & artifacts
+**/data/
+**/runs/
+*.parquet
+
+# Agent skills manifest (skills themselves live in the ignored .agents/)
+skills-lock.json
