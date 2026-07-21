@@ -629,11 +629,9 @@ def _(mo):
 
     The notebook is fully self-contained: instead of importing from a package, the
     data and model plumbing lives in the three hidden cells below, frozen from
-    [lancedb/tmls-2026-demo](https://github.com/lancedb/tmls-2026-demo). That is why
-    "Open in molab" needs only this one file.
+    [the source repo](https://github.com/lancedb/tmls-2026-demo).
 
-    The code is hidden, not gone — each cell shows a one-line summary of what it
-    defines. To read one, select the cell and choose **Show code** from its menu.
+    The code for helper functions is hidden for brevity, but if you expand it, each cell shows a one-line summary of what it defines. To read one, select the cell and choose **Show code** from its menu.
     """)
     return
 
