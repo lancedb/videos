@@ -102,9 +102,9 @@ def _(mo):
 
     Download the public subset, then project out just the **raw** columns (`id`,
     `image`, `question`, `answer`) into a fresh local table. The download ships with
-    precomputed feature columns (that is video 1's point), so starting from a
-    raw-only copy means every column this notebook adds is genuinely new. The raw
-    image, question, and answer never move again.
+    precomputed feature columns, so starting from a raw-only copy means every column
+    this notebook adds is genuinely new. The raw image, question, and answer never
+    move again.
     """)
     return
 
@@ -163,7 +163,7 @@ def _(mo):
 
 @app.cell(hide_code=True)
 def _():
-    # Thumbnail helper for the gallery (lifted from video 1).
+    # Thumbnail helper for the image galleries.
     import base64
     import io
 
@@ -477,8 +477,10 @@ def _(mo):
     ## Wrap: one table, raw to training-ready
 
     Start with image, question, answer; end with three tiers of features attached,
-    each a zero-copy column add. This table now feeds a fine-tuning loop that reads
-    the cached vision features straight off disk (that is video 1's story).
+    each a zero-copy column add. The expensive computations are now materialized on
+    the same table that holds the raw data, ready for a training loop to read them
+    straight off disk. Here is the final schema, with the columns this notebook
+    added highlighted:
     """)
     return
 
@@ -486,14 +488,50 @@ def _(mo):
 @app.cell
 def _(DEMO_PATH, lance, mo, tier1_done, tier2_done):
     _ = (tier1_done, tier2_done)  # depend on the backfills so this runs after them
-    _names = lance.dataset(DEMO_PATH).schema.names
-    _added = [n for n in ("question_type", "dhash", "vision_tower_hiddens") if n in _names]
-    mo.md(
-        f"**Final schema:** {len(_names)} columns.  \n"
-        f"**Feature columns from this notebook:** "
-        + ", ".join(f"`{n}`" for n in _added)
-        + ".  \nEach one is a zero-copy add on the table that holds the raw image, "
-        "question, and answer."
+
+    FEATURES = {
+        "question_type": "Tier 1 backfill · question_type UDF",
+        "dhash": "Tier 2 backfill · dhash UDF",
+        "vision_tower_hiddens": "Tier 3 backfill · vision-tower UDF",
+    }
+    schema = lance.dataset(DEMO_PATH).schema
+    new_idx = {i for i, f in enumerate(schema) if f.name in FEATURES}
+    schema_rows = [
+        {
+            "Column": f.name,
+            "Type": str(f.type),
+            "Source": FEATURES.get(f.name, "raw data"),
+            "New": "✅" if f.name in FEATURES else "",
+        }
+        for f in schema
+    ]
+
+    def _style(row_id, _column, _value):
+        # Highlight the feature columns this notebook added.
+        try:
+            return {"backgroundColor": "#e6ffe6"} if int(row_id) in new_idx else {}
+        except (TypeError, ValueError):
+            return {}
+
+    schema_table = mo.ui.table(
+        schema_rows,
+        selection=None,
+        pagination=False,
+        show_column_summaries=False,
+        show_data_types=False,
+        wrapped_columns=["Type", "Source"],
+        text_justify_columns={"New": "center"},
+        style_cell=_style,
+    )
+    mo.vstack(
+        [
+            mo.md(
+                f"**{len(schema.names)} columns**: the raw data plus "
+                f"**{len(new_idx)} feature columns**, each defined as a UDF and "
+                "materialized one backfill at a time (highlighted rows)."
+            ),
+            schema_table,
+        ]
     )
     return
 
