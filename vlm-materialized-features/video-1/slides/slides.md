@@ -21,7 +21,7 @@ transition: slide-left
 layout: cover
 ---
 
-<Eyebrow>Vision model fine-tuning</Eyebrow>
+<Eyebrow>Model training and fine-tuning</Eyebrow>
 
 # Fine-tune your models faster <span class="gradient-text">with materialized model features</span>
 
@@ -36,9 +36,9 @@ How Lance's zero-copy data evolution and fast retrieval let you fine-tune a VLM 
 <!--
 0:00–0:15 · ~15s · SAY:
 
-If you fine-tune vision language models, you're probably wasting a lot of GPU
+If you train or fine-tune vision language models, you're probably wasting a lot of GPU
 time recomputing something that never changes. In the next five minutes I'll
-show you how to fix that with your data format, not your model.
+show you how LanceDB fixes that the Lance format format.
 
 [advance]
 -->
@@ -85,16 +85,14 @@ show you how to fix that with your data format, not your model.
 <!--
 0:15–0:55 · ~40s · SAY:
 
-Our task is TextVQA: answer a question about an image where the answer is
-literally written in the picture. What brand is the sugar? You have to read
-the packet to say "Domino".
+Our task is TextVQA: that is, answer a question about an image where the answer is in text embedded inside the image. What brand is this packet of sugar? The model has to reason over the pixels pf the image and read the text on the packet, to say "Domino".
 
-A vision language model answers in two stages. An image encoder turns the
-picture into visual embeddings, then a language model reads those embeddings
-plus your question and writes the answer.
+This is visual question-answering in a nutshell. It has two stages: an image encoder turns the
+image into embeddings; THEN a language model reads those embeddings
+plus your question and generates the answer.
 
-Base models are broad, but they miss small domain details, like that tiny
-print on the label. So we fine-tune: we show the model lots of image,
+Even if your base model is capable, it likely misses small domain details, like that tiny
+print on the label. So we fine-tune the base model: we show the model lots of image,
 question, answer examples until it gets good at our kind of questions.
 
 [advance]
@@ -120,7 +118,7 @@ class: flex flex-col justify-center
 </div>
 
 <div class="callout" style="margin-top: 16px;">
-  Precomputing is the speedup; <strong>Lance makes it painless</strong>: a cheap column add instead of a table rewrite, with no sidecar files. <strong>~2× faster steps, 1.3 GB less GPU memory.</strong>
+  Precomputing is the speedup; <strong>Lance makes it painless</strong>: a cheap column add instead of a table rewrite, with no sidecar files.<br/><strong>~2× the training throughput (16 vs 8 samples/sec) and 1.3 GB less GPU memory.</strong>
 </div>
 
 <style>
@@ -135,17 +133,19 @@ class: flex flex-col justify-center
 <!--
 0:55–1:35 · ~40s · SAY:
 
-Here's the hidden waste. During fine-tuning, the image encoder is frozen. Same
-image in, same embeddings out, every single epoch. Yet the standard training
-loop re-encodes every image on every pass. That's pure wasted GPU.
+There's some wasteful compute hidden in this process.
+During fine-tuning, the image encoder is frozen. The same
+image in, the same embeddings out, every single epoch. Yet, the standard training
+loop re-encodes every image on every pass. That's wasted GPU.
 
 The fix is to precompute those embeddings once. But where do you put them?
-Sidecar files you keep aligned by hand? And adding a column to a Parquet table
-means rewriting the whole table.
+Sidecar files may drift from the source data. Adding a column to the Parquet file
+may mean rewriting the whole table.
 
 With Lance, you add them as a column on the same table, and the dataloader
-reads them straight off disk. That's roughly two times faster training steps,
-and over a gigabyte of GPU memory back.
+reads them straight off disk. Each training step then processes about twice the
+throughput, roughly 16 versus 8 samples per second, and it frees over a gigabyte
+of GPU memory.
 
 [advance]
 -->
