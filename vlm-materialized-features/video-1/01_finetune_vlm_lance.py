@@ -21,7 +21,7 @@
 import marimo
 
 __generated_with = "0.23.14"
-app = marimo.App(width="medium")
+app = marimo.App()
 
 
 @app.cell
@@ -184,7 +184,7 @@ def _(train_tbl):
     )
 
     # Derive a question_type by regex (the kind of column you would Geneva-backfill).
-    _QPATS = [
+    QPATS = [
         ("how many", r"^\s*how\s+many"),
         ("what is/are", r"^\s*what\s+(is|are)"),
         ("what", r"^\s*what"),
@@ -195,7 +195,7 @@ def _(train_tbl):
     ]
 
     def qtype(q):
-        for lab, pat in _QPATS:
+        for lab, pat in QPATS:
             if re.search(pat, q or "", re.I):
                 return lab
         return "other"
@@ -321,9 +321,7 @@ def _(mo):
 
 
 @app.cell
-def _(np, train_tbl):
-    import time as _t
-
+def _(np, time, train_tbl):
     import pyarrow.dataset as pds
     import pyarrow.parquet as pq
 
@@ -341,17 +339,17 @@ def _(np, train_tbl):
     rng = np.random.default_rng(0)
 
     def seq(ds, cols):
-        t0 = _t.time()
+        t0 = time.time()
         for _b in ds.to_batches(columns=cols, batch_size=BATCH):
             pass
-        return n / (_t.time() - t0)
+        return n / (time.time() - t0)
 
     def shuf(ds, cols, NB=20):
         bs = [sorted(rng.choice(n, BATCH, replace=False).tolist()) for _ in range(NB)]
-        t0 = _t.time()
+        t0 = time.time()
         for idx in bs:
             ds.take(idx, columns=cols)
-        return (NB * BATCH) / (_t.time() - t0)
+        return (NB * BATCH) / (time.time() - t0)
 
     print(f"{'throughput, rows/s':36}{'LanceDB':>10}{'Parquet':>10}")
     print(f"{'image+Q+A (raw)     sequential':34}{seq(lance_ds, RAW):9.0f}{seq(raw_pq, RAW):9.0f}")
@@ -507,7 +505,7 @@ def _(mo):
 def _(ADAPTER_DIR, Image, eval_button, gc, io, mo, torch, val_tbl):
     mo.stop(not eval_button.value, mo.md("> ▶ Click **Run before/after eval** above (run the fine-tune first)."))
 
-    from vlm.eval import _generate, _load_model, _score_one as score_one
+    from vlm.eval import _generate as generate, _load_model as load_model, _score_one as score_one
 
     EVAL_N = min(val_tbl.count_rows(), 256)  # held-out curated val rows to score
     GRID_K = 6  # how many to show side by side
@@ -520,11 +518,11 @@ def _(ADAPTER_DIR, Image, eval_button, gc, io, mo, torch, val_tbl):
     )
 
     def run(adapter):
-        m, proc = _load_model(adapter_dir=adapter, load_4bit=True)
+        m, proc = load_model(adapter_dir=adapter, load_4bit=True)
         outs = []
         for r in rows:
             img = Image.open(io.BytesIO(r["image"])).convert("RGB")
-            outs.append(_generate(m, proc, img, r["question"]))
+            outs.append(generate(m, proc, img, r["question"]))
         del m
         gc.collect()
         torch.cuda.empty_cache()
