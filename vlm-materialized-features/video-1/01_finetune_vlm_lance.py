@@ -261,16 +261,21 @@ def _(mo, np, train_tbl):
         .to_arrow()
         .to_pylist()
     )
-    _tds = "".join(
-        f'<td style="text-align:center;font-size:11px">'
-        f'<img src="data:image/jpeg;base64,{b64_thumb(h["image"], 150)}" width=150><br>'
-        f'd={h["_distance"]:.2f}<br>Q: {h["question"]}<br><b>A: {h["answer"]}</b></td>'
+    hit_cards = [
+        mo.vstack(
+            [
+                mo.image(f"data:image/jpeg;base64,{b64_thumb(h['image'], 150)}", width=150),
+                mo.md(f"d={h['_distance']:.2f}  \nQ: {h['question']}  \n**A: {h['answer']}**"),
+            ],
+            align="center",
+            gap=0.25,
+        )
         for h in hits
-    )
+    ]
     mo.vstack(
         [
             mo.md(f"**Query question:** *{q['question']}*  \nNearest images by CLIP image embedding (L2 distance):"),
-            mo.Html(f"<table><tr>{_tds}</tr></table>"),
+            mo.hstack(hit_cards, justify="start", wrap=True, gap=1),
         ]
     )
     return (b64_thumb,)
@@ -295,14 +300,22 @@ def _(b64_thumb, mo, train_tbl):
         .to_arrow()
         .to_pylist()
     )
-    _tds = "".join(
-        f'<td style="text-align:center;font-size:11px;vertical-align:top">'
-        f'<img src="data:image/jpeg;base64,{b64_thumb(s["image"], 170)}" width=170><br>'
-        f'<b>{s["question"]}</b><br>answer: {s["answer"]}<br>'
-        f'<span style="color:#888">ocr: {" ".join((s["ocr_tokens"] or [])[:8])}</span></td>'
+    example_cards = [
+        mo.vstack(
+            [
+                mo.image(f"data:image/jpeg;base64,{b64_thumb(s['image'], 170)}", width=170),
+                mo.md(
+                    f"**{s['question']}**  \n"
+                    f"answer: {s['answer']}  \n"
+                    f"ocr: {' '.join((s['ocr_tokens'] or [])[:8])}"
+                ),
+            ],
+            align="center",
+            gap=0.25,
+        )
         for s in samples
-    )
-    mo.Html(f"<table><tr>{_tds}</tr></table>")
+    ]
+    mo.hstack(example_cards, justify="start", wrap=True, gap=1)
     return
 
 
