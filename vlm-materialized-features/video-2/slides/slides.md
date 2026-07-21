@@ -35,12 +35,11 @@ table, without paying an infrastructure tax to compute them at scale.
 ![Vector computer illustration](./assets/hero.png)
 
 <!--
-0:00–0:20 · ~20s · SAY:
+0:00–0:15 · ~15s · SAY:
 
 Fine-tuning doesn't run on raw images and text. It runs on derived data:
-embeddings, tokenized prompts, quality signals. Computing all of that over a
-real corpus is where a lot of research time quietly disappears. This video is
-about making that part cheap.
+embeddings, tokens, quality signals. Computing that at scale is where research
+time goes. Let's make it cheap.
 
 [advance]
 -->
@@ -161,18 +160,14 @@ With Lance, creating new features is cheap enough that materializing results fro
 </style>
 
 <!--
-0:20–1:05 · ~45s · SAY:
+0:15–0:55 · ~40s · SAY:
 
-Here's the idea the whole video rests on. In a LanceDB table, every feature you
-derive is just a new column on the table that already holds your raw data.
+So why is adding that column cheap? Lance tables grow in two directions. New
+feature columns attach alongside the existing data, and new rows append below.
+Neither touches the bytes you already wrote; only the new column's data gets
+written. No table rewrite, no sidecar files.
 
-Adding that column writes only the new column's bytes. It doesn't rewrite the
-table, and it doesn't scatter your features into separate files you have to keep
-lined up with the source rows by hand.
-
-So the natural home for a feature isn't some separate feature store. It's the
-source table itself. You compute a column, you attach it, and later you read the
-raw inputs and the derived features back together in one shot.
+That's what makes materializing an expensive computation second nature.
 
 [advance]
 -->
@@ -262,23 +257,16 @@ class: flex flex-col justify-center
 </style>
 
 <!--
-1:05–1:55 · ~50s · SAY:
+0:55–1:35 · ~40s · SAY:
 
-The features you need cover a huge cost range. At the cheap end, text signals
-like the question type or a token count, pure CPU, done in seconds. In the
-middle, features that decode the image, like a perceptual hash to flag
-near-duplicate pictures. At the expensive end, model features: running a frozen
-vision model over every image, and pre-tokenizing the prompts.
+The features you need cover a huge cost range. Text signals like question type,
+pure CPU, seconds. Image features like a perceptual hash for near-duplicates. And
+model features: a frozen vision model run over every image.
 
-Three very different costs. But here's the point: the way you define them does
-not change. You write a plain Python function that turns one row into a feature.
-That's a UDF.
-
-LanceDB's feature engineering takes it from there. It batches the work,
-checkpoints as it goes so a crash resumes instead of restarting, and spreads the
-compute out for you. The same function you tested on your laptop runs across a
-cluster without changes. You think about the feature; the distribution is
-handled.
+Three very different costs, but the way you define each one is the same: a plain
+Python function that turns a row into a feature. A UDF. LanceDB's feature
+engineering batches it, checkpoints so a crash resumes, and spreads the compute
+out. Same function, laptop or cluster.
 
 Let's build all three, on a real table.
 
