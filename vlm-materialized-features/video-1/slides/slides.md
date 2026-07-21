@@ -49,7 +49,7 @@ show you how to fix that with your data format, not your model.
 
 <div class="task-cols">
 <div>
-  <img src="/textvqa-diff.png" alt="TextVQA examples on a TWA sugar packet — questions and the answers read from the image" class="task-img" />
+  <img :src="'/textvqa-diff.png'" alt="TextVQA examples on a TWA sugar packet — questions and the answers read from the image" class="task-img" />
   <div class="task-cap">Each example: an image + a question + the answer + the OCR text read off it. Answers come straight from the packet's print.<br>Dataset: <a href="https://textvqa.org/" target="_blank">textvqa.org ↗</a></div>
 </div>
 <div>
