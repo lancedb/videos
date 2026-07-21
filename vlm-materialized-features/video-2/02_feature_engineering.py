@@ -73,6 +73,7 @@ def _():
 
     import geneva
     import lance
+    import lancedb
     import numpy as np
     import pyarrow as pa
     import torch
@@ -81,7 +82,7 @@ def _():
     warnings.filterwarnings("ignore", message=r"_check_is_size.*", category=FutureWarning)
 
     HAS_GPU = torch.cuda.is_available()
-    return HAS_GPU, geneva, lance, np, pa, re, torch, udf
+    return HAS_GPU, geneva, lance, lancedb, np, pa, re, torch, udf
 
 
 @app.cell(hide_code=True)
@@ -99,14 +100,17 @@ def _(mo):
     mo.md(r"""
     ## 1 · The table
 
-    Download the public subset and open it. Everything below adds columns to *this*
-    table; the raw image, question, and answer never move.
+    Download the public subset, then project out just the **raw** columns (`id`,
+    `image`, `question`, `answer`) into a fresh local table. The download ships with
+    precomputed feature columns (that is video 1's point), so starting from a
+    raw-only copy means every column this notebook adds is genuinely new. The raw
+    image, question, and answer never move again.
     """)
     return
 
 
 @app.cell
-def _(geneva, lance):
+def _(geneva, lance, lancedb):
     from huggingface_hub import snapshot_download
 
     LOCAL = snapshot_download(
@@ -114,21 +118,97 @@ def _(geneva, lance):
         repo_type="dataset",
         local_dir="data/colab",
     )
-    TABLE_NAME = "textvqa_colab_train"
-    TRAIN_PATH = f"{LOCAL}/{TABLE_NAME}.lance"
 
-    # geneva handle for feature engineering (backfills); a plain Lance handle for reads.
-    gdb = geneva.connect(LOCAL)
+    # Project just the raw columns into a fresh table: every feature column the
+    # notebook adds from here on is genuinely new. (The download also ships the
+    # precomputed features; we deliberately leave those behind.)
+    RAW_COLS = ["id", "image", "question", "answer"]
+    raw = lance.dataset(f"{LOCAL}/textvqa_colab_train.lance").to_table(columns=RAW_COLS)
+
+    DEMO_DIR = "data/demo"
+    TABLE_NAME = "textvqa_raw"
+    DEMO_PATH = f"{DEMO_DIR}/{TABLE_NAME}.lance"
+    lance.write_dataset(raw, DEMO_PATH, mode="overwrite")
+
+    # geneva handle for feature engineering (backfills); plain Lance handles for reads.
+    gdb = geneva.connect(DEMO_DIR)
+
+    # A LanceDB handle on the downloaded table (it ships CLIP embeddings), for the
+    # cross-modal search demo below.
+    train_tbl = lancedb.connect(LOCAL).open_table("textvqa_colab_train")
 
     def read_columns(cols, limit=None):
-        ds = lance.dataset(TRAIN_PATH)  # reopened each call to pick up new columns
+        ds = lance.dataset(DEMO_PATH)  # reopened each call to pick up new columns
         n = ds.count_rows() if limit is None else min(limit, ds.count_rows())
         return ds.to_table(columns=cols, limit=n).to_pandas()
 
-    _ds = lance.dataset(TRAIN_PATH)
-    print("rows   :", _ds.count_rows())
-    print("columns:", _ds.schema.names)
-    return TABLE_NAME, TRAIN_PATH, gdb, read_columns
+    print("rows   :", raw.num_rows)
+    print("columns:", raw.schema.names)
+    return DEMO_PATH, TABLE_NAME, gdb, read_columns, train_tbl
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Cross-modal vector search (text → image), straight from LanceDB
+
+    The table ships CLIP embeddings for the question text (`question_emb`) and the
+    image (`image_emb`). So we can take one question's text embedding and ask LanceDB
+    for the images whose CLIP embedding is nearest. That gives us text→image
+    retrieval without loading any model: the whole thing is one `tbl.search(...)`
+    call.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    # Thumbnail helper for the gallery (lifted from video 1).
+    import base64
+    import io
+
+    from PIL import Image
+
+    def b64_thumb(image_bytes, size=192):
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        img.thumbnail((size, size))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=80)
+        return base64.b64encode(buf.getvalue()).decode("ascii")
+
+    return (b64_thumb,)
+
+
+@app.cell
+def _(b64_thumb, mo, np, train_tbl):
+    # Pick a query row, use its question_emb as the query vector against image_emb.
+    q = train_tbl.search().select(["question", "question_emb"]).limit(40).to_arrow().to_pylist()[11]
+    qvec = np.asarray(q["question_emb"], dtype=np.float32)
+    hits = (
+        train_tbl.search(qvec, vector_column_name="image_emb")
+        .select(["image", "question", "answer", "_distance"])
+        .limit(5)
+        .to_arrow()
+        .to_pylist()
+    )
+    hit_cards = [
+        mo.vstack(
+            [
+                mo.image(f"data:image/jpeg;base64,{b64_thumb(h['image'], 150)}", width=150),
+                mo.md(f"d={h['_distance']:.2f}  \nQ: {h['question']}  \n**A: {h['answer']}**"),
+            ],
+            align="center",
+            gap=0.25,
+        )
+        for h in hits
+    ]
+    mo.vstack(
+        [
+            mo.md(f"**Query question:** *{q['question']}*  \nNearest images by CLIP image embedding (L2 distance):"),
+            mo.hstack(hit_cards, justify="start", wrap=True, gap=1),
+        ]
+    )
+    return
 
 
 @app.cell(hide_code=True)
@@ -258,9 +338,10 @@ def _(mo):
     lazy-loads the model in the worker so the driver never touches the GPU. The
     abstraction is the same; only the cost is different.
 
-    This is gated behind a button because it needs a GPU. On this shipped subset the
-    column already exists (it was produced by exactly this call), so the cell reports
-    that instead of recomputing.
+    This is gated behind a button because it needs a GPU (and the first run also
+    downloads the ~7 GB model). On molab, toggle the GPU on and click the button:
+    the backfill runs for real over all 600 images, with the knobs that matter at
+    scale (`concurrency`, `task_size`, `checkpoint_size`).
     """)
     return
 
@@ -330,26 +411,20 @@ def _(HAS_GPU, TABLE_NAME, gdb, mo, t3_button, vision_tower_hiddens):
     mo.stop(not HAS_GPU, mo.md("> ⚠️ **GPU required.** Enable a GPU in the notebook specs, then re-run."))
     mo.stop(not t3_button.value, mo.md("> ▶ Click **Run Tier 3 backfill** above."))
 
+    import time
+
     _table = gdb.open_table(TABLE_NAME)
     if "vision_tower_hiddens" in {f.name for f in _table.schema}:
-        _msg = (
-            "`vision_tower_hiddens` is already on this table. It was produced by the "
-            "exact call below, with the knobs that matter at scale:\n\n"
-            "```python\n"
-            "table.add_columns({'vision_tower_hiddens': vision_tower_hiddens})\n"
-            "with db.local_ray_context():\n"
-            "    table.backfill('vision_tower_hiddens', udf=vision_tower_hiddens,\n"
-            "                   concurrency=2, task_size=128, checkpoint_size=64)\n"
-            "```"
-        )
+        _msg = "`vision_tower_hiddens` is already on the table (backfilled earlier in this session)."
     else:
+        _t0 = time.time()
         _table.add_columns({"vision_tower_hiddens": vision_tower_hiddens})
         with gdb.local_ray_context():
             _table.backfill(
                 "vision_tower_hiddens", udf=vision_tower_hiddens,
                 concurrency=2, task_size=128, checkpoint_size=64,
             )
-        _msg = "Backfilled `vision_tower_hiddens`."
+        _msg = f"Backfilled `vision_tower_hiddens` in {time.time() - _t0:.0f}s."
     tier3_done = "vision_tower_hiddens"
     mo.md(_msg)
     return
@@ -407,9 +482,9 @@ def _(mo):
 
 
 @app.cell
-def _(TRAIN_PATH, lance, mo, tier1_done, tier2_done):
+def _(DEMO_PATH, lance, mo, tier1_done, tier2_done):
     _ = (tier1_done, tier2_done)  # depend on the backfills so this runs after them
-    _names = lance.dataset(TRAIN_PATH).schema.names
+    _names = lance.dataset(DEMO_PATH).schema.names
     _added = [n for n in ("question_type", "dhash", "vision_tower_hiddens") if n in _names]
     mo.md(
         f"**Final schema:** {len(_names)} columns.  \n"
