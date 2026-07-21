@@ -73,6 +73,7 @@ def _():
 
     import geneva
     import lance
+    import lancedb
     import numpy as np
     import pyarrow as pa
     import torch
@@ -81,7 +82,7 @@ def _():
     warnings.filterwarnings("ignore", message=r"_check_is_size.*", category=FutureWarning)
 
     HAS_GPU = torch.cuda.is_available()
-    return HAS_GPU, geneva, lance, np, pa, re, torch, udf
+    return HAS_GPU, geneva, lance, lancedb, np, pa, re, torch, udf
 
 
 @app.cell(hide_code=True)
@@ -109,7 +110,7 @@ def _(mo):
 
 
 @app.cell
-def _(geneva, lance):
+def _(geneva, lance, lancedb):
     from huggingface_hub import snapshot_download
 
     LOCAL = snapshot_download(
@@ -132,6 +133,10 @@ def _(geneva, lance):
     # geneva handle for feature engineering (backfills); plain Lance handles for reads.
     gdb = geneva.connect(DEMO_DIR)
 
+    # A LanceDB handle on the downloaded table (it ships CLIP embeddings), for the
+    # cross-modal search demo below.
+    train_tbl = lancedb.connect(LOCAL).open_table("textvqa_colab_train")
+
     def read_columns(cols, limit=None):
         ds = lance.dataset(DEMO_PATH)  # reopened each call to pick up new columns
         n = ds.count_rows() if limit is None else min(limit, ds.count_rows())
@@ -139,7 +144,71 @@ def _(geneva, lance):
 
     print("rows   :", raw.num_rows)
     print("columns:", raw.schema.names)
-    return DEMO_PATH, TABLE_NAME, gdb, read_columns
+    return DEMO_PATH, TABLE_NAME, gdb, read_columns, train_tbl
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Cross-modal vector search (text → image), straight from LanceDB
+
+    The table ships CLIP embeddings for the question text (`question_emb`) and the
+    image (`image_emb`). So we can take one question's text embedding and ask LanceDB
+    for the images whose CLIP embedding is nearest. That gives us text→image
+    retrieval without loading any model: the whole thing is one `tbl.search(...)`
+    call.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    # Thumbnail helper for the gallery (lifted from video 1).
+    import base64
+    import io
+
+    from PIL import Image
+
+    def b64_thumb(image_bytes, size=192):
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        img.thumbnail((size, size))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=80)
+        return base64.b64encode(buf.getvalue()).decode("ascii")
+
+    return (b64_thumb,)
+
+
+@app.cell
+def _(b64_thumb, mo, np, train_tbl):
+    # Pick a query row, use its question_emb as the query vector against image_emb.
+    q = train_tbl.search().select(["question", "question_emb"]).limit(40).to_arrow().to_pylist()[11]
+    qvec = np.asarray(q["question_emb"], dtype=np.float32)
+    hits = (
+        train_tbl.search(qvec, vector_column_name="image_emb")
+        .select(["image", "question", "answer", "_distance"])
+        .limit(5)
+        .to_arrow()
+        .to_pylist()
+    )
+    hit_cards = [
+        mo.vstack(
+            [
+                mo.image(f"data:image/jpeg;base64,{b64_thumb(h['image'], 150)}", width=150),
+                mo.md(f"d={h['_distance']:.2f}  \nQ: {h['question']}  \n**A: {h['answer']}**"),
+            ],
+            align="center",
+            gap=0.25,
+        )
+        for h in hits
+    ]
+    mo.vstack(
+        [
+            mo.md(f"**Query question:** *{q['question']}*  \nNearest images by CLIP image embedding (L2 distance):"),
+            mo.hstack(hit_cards, justify="start", wrap=True, gap=1),
+        ]
+    )
+    return
 
 
 @app.cell(hide_code=True)
