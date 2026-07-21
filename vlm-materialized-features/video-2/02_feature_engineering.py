@@ -38,9 +38,8 @@ def _(mo):
     [![Open in molab](https://marimo.io/molab-shield.svg)](https://molab.marimo.io/github/lancedb/videos/blob/main/vlm-materialized-features/video-2/02_feature_engineering.py)
 
     A fine-tuning pipeline doesn't run on raw images and text. It runs on *derived*
-    data: quality signals, image fingerprints, model embeddings. This notebook builds
-    those feature columns directly on one LanceDB table, from the cheapest to the
-    most expensive, using a single abstraction.
+    data. This notebook builds those feature columns directly on one LanceDB table,
+    cheapest to most expensive, with one abstraction.
 
     The dataset is a small [TextVQA](https://textvqa.org) subset: 600 rows of image
     plus question plus answer. We add three tiers of features on top of it:
@@ -57,7 +56,7 @@ def _(mo):
     mo.md(r"""
     ## 0 · Setup
 
-    Feature engineering here is powered by the **geneva** package. You define each
+    Feature engineering here uses the **geneva** package. You define each
     feature as a plain Python function (a UDF); LanceDB's feature engineering runs it
     over the table, handles batching and checkpointing, and can spread the work
     across your compute. Tiers 1 and 2 run on CPU. Tier 3 needs a GPU (about 5 GB
@@ -90,7 +89,7 @@ def _(HAS_GPU, mo, torch):
     _gpu = torch.cuda.get_device_name(0) if HAS_GPU else "none detected (CPU only)"
     mo.md(
         f"**torch** `{torch.__version__}`  ·  **GPU:** {_gpu}"
-        + ("" if HAS_GPU else "  ·  Tiers 1–2 run here; enable a GPU for Tier 3")
+        + ("" if HAS_GPU else "  ·  Tiers 1 and 2 run here; enable a GPU for Tier 3")
     )
     return
 
@@ -135,7 +134,7 @@ def _(geneva, lance):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 2 · Tier 1 — text signals
+    ## 2 · Tier 1: text signals
 
     The cheapest features are plain functions over a text column. `question_type`
     buckets each question by its leading words. The `@udf` decorator declares the
@@ -195,7 +194,7 @@ def _(mo, plt_counts, read_columns, tier1_done):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 3 · Tier 2 — an image fingerprint
+    ## 3 · Tier 2: an image fingerprint
 
     Same abstraction, heavier input. `dhash` decodes each image once and computes a
     64-bit perceptual hash; near-duplicate images share most of their bits. The
@@ -252,7 +251,7 @@ def _(mo, read_columns, tier2_done):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 4 · Tier 3 — a model feature (GPU)
+    ## 4 · Tier 3: a model feature (GPU)
 
     The headline feature: run a frozen vision model over every image once and store
     its output as a fixed-size vector per row. It is a stateful UDF, a class that
@@ -398,7 +397,7 @@ def _(lance, np, pa):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Wrap — one table, raw to training-ready
+    ## Wrap: one table, raw to training-ready
 
     Start with image, question, answer; end with three tiers of features attached,
     each a zero-copy column add. This table now feeds a fine-tuning loop that reads
